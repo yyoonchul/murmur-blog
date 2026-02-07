@@ -9,8 +9,8 @@ export default function Header() {
     <header className="container-narrow py-8">
       <nav className="flex items-center justify-between">
         <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
-          <h1 className="sr-only">Murmur</h1>
-          <img src="/murmur-logo.svg" alt="Murmur" className="h-10" />
+          <h1 className="sr-only">Monolog</h1>
+          <img src="/monolog-logo.svg" alt="Monolog" className="h-10" />
         </Link>
         <div className="flex gap-6 text-sm text-secondary">
           <Link

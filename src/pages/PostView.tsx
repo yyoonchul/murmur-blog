@@ -1,14 +1,41 @@
-import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { marked } from "marked";
 import CommentCard from "../components/CommentCard";
 import CommentInput from "../components/CommentInput";
-import { getPost, deletePost } from "../services/api";
-import type { Post, Comment } from "../types";
+import { getPost, deletePost, addComment, getPersonas } from "../services/api";
+import type { ServerComment } from "../services/api";
+import type { Post, Comment, PersonaInfo } from "../types";
+
+type PersonaMap = Map<string, PersonaInfo>;
+
+function transformComments(
+  serverComments: ServerComment[],
+  postId: string,
+  personaMap: PersonaMap
+): Comment[] {
+  return serverComments.map((c) => {
+    const persona = personaMap.get(c.personaId);
+    return {
+      id: c.id,
+      postId,
+      persona: c.personaId === "user" ? "Me" : persona?.name || c.personaId,
+      content: c.content,
+      createdAt: c.createdAt,
+      isAI: c.personaId !== "user",
+      parentId: c.parentId,
+      personaEmoji: persona?.emoji,
+      personaColor: persona?.color,
+      personaBgColor: persona?.bgColor,
+      personaBorderColor: persona?.borderColor,
+    };
+  });
+}
 
 export default function PostView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
@@ -16,34 +43,98 @@ export default function PostView() {
   const [deleting, setDeleting] = useState(false);
 
   const [comments, setComments] = useState<Comment[]>([]);
-  const [isCommenting, setIsCommenting] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [personaMap, setPersonaMap] = useState<PersonaMap>(new Map());
+  const [aiGenerating, setAiGenerating] = useState(false);
 
+  const justCreated = (location.state as { justCreated?: boolean })?.justCreated === true;
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load personas
+  useEffect(() => {
+    getPersonas()
+      .then((data) => {
+        const map = new Map<string, PersonaInfo>();
+        for (const p of data.personas) {
+          map.set(p.id, p);
+        }
+        setPersonaMap(map);
+      })
+      .catch((err) => console.error("Failed to load personas:", err));
+  }, []);
+
+  // Load post and comments
   useEffect(() => {
     if (!id) return;
     getPost(id)
       .then((data) => {
         setPost(data);
-        // comments are now part of post metadata
-        setComments((data as Post & { comments?: Comment[] }).comments || []);
+        const serverComments = (data as Post & { comments?: ServerComment[] }).comments || [];
+        setComments(transformComments(serverComments, id, personaMap));
       })
-      .catch(() => setError("글을 불러올 수 없습니다."))
+      .catch(() => setError("Failed to load post."))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, personaMap]);
+
+  // Re-fetch comments helper
+  const refreshComments = useCallback(async () => {
+    if (!id) return 0;
+    try {
+      const data = await getPost(id);
+      const serverComments = (data as Post & { comments?: ServerComment[] }).comments || [];
+      setComments(transformComments(serverComments, id, personaMap));
+      return serverComments.length;
+    } catch {
+      return 0;
+    }
+  }, [id, personaMap]);
+
+  // Polling for AI comments after post creation
+  useEffect(() => {
+    if (!justCreated || !id) return;
+
+    setAiGenerating(true);
+
+    // Clear the justCreated state from location so refresh doesn't re-trigger
+    window.history.replaceState({}, "");
+
+    pollingRef.current = setInterval(async () => {
+      const count = await refreshComments();
+      if (count >= 5) {
+        // AI comments are likely done
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+        setAiGenerating(false);
+      }
+    }, 3000);
+
+    // Timeout after 2 minutes
+    pollingTimeoutRef.current = setTimeout(() => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      setAiGenerating(false);
+    }, 120000);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+    };
+  }, [justCreated, id, refreshComments]);
 
   const handleDelete = async () => {
-    if (!id || !confirm("정말 삭제하시겠습니까?")) return;
+    if (!id || !confirm("Are you sure you want to delete this post?")) return;
     setDeleting(true);
     try {
       await deletePost(id);
       navigate("/");
     } catch {
-      setError("삭제에 실패했습니다.");
+      setError("Failed to delete post.");
       setDeleting(false);
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("ko-KR", {
+    return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -51,21 +142,39 @@ export default function PostView() {
   };
 
   const handleCommentSubmit = async (content: string) => {
-    setIsCommenting(true);
-    // Simulate AI response delay (placeholder for future AI integration)
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    if (!post) return;
 
-    const newComment: Comment = {
-      id: `c${Date.now()}`,
-      postId: post?.id || "",
-      persona: "You",
-      content,
-      createdAt: new Date().toISOString(),
-      isAI: false,
-    };
+    try {
+      const savedArr = await addComment(post.id, { personaId: "user", content });
+      const newComments = transformComments(savedArr, post.id, personaMap);
+      setComments((prev) => [...prev, ...newComments]);
+    } catch (err) {
+      console.error("Failed to add comment:", err);
+    }
+  };
 
-    setComments((prev) => [...prev, newComment]);
-    setIsCommenting(false);
+  const handleReplySubmit = async (parentId: string, content: string) => {
+    if (!post) return;
+
+    try {
+      const savedArr = await addComment(post.id, { personaId: "user", content, parentId });
+      const newComments = transformComments(savedArr, post.id, personaMap);
+      setComments((prev) => [...prev, ...newComments]);
+      setReplyingTo(null);
+    } catch (err) {
+      console.error("Failed to add reply:", err);
+    }
+  };
+
+  // Build comment tree: attach replies to parent comments
+  const buildCommentTree = (flatComments: Comment[]): Comment[] => {
+    const topLevel = flatComments.filter((c) => !c.parentId);
+    const replies = flatComments.filter((c) => c.parentId);
+
+    return topLevel.map((comment) => ({
+      ...comment,
+      replies: replies.filter((r) => r.parentId === comment.id),
+    }));
   };
 
   // Configure marked for safe HTML rendering
@@ -77,7 +186,7 @@ export default function PostView() {
   if (loading) {
     return (
       <div className="animate-fade-in">
-        <p className="text-muted text-sm">불러오는 중...</p>
+        <p className="text-muted text-sm">Loading...</p>
       </div>
     );
   }
@@ -85,15 +194,16 @@ export default function PostView() {
   if (error || !post) {
     return (
       <div className="animate-fade-in py-16 text-center">
-        <p className="text-secondary">{error || "글을 찾을 수 없습니다."}</p>
+        <p className="text-secondary">{error || "Post not found."}</p>
         <Link to="/" className="btn-accent text-sm mt-4 inline-block">
-          홈으로
+          Back to Home
         </Link>
       </div>
     );
   }
 
   const renderedContent = marked(post.content);
+  const commentTree = buildCommentTree(comments);
 
   return (
     <div className="animate-fade-in">
@@ -102,7 +212,7 @@ export default function PostView() {
         to="/"
         className="text-sm text-secondary hover:text-primary transition-colors inline-flex items-center gap-1 mb-8"
       >
-        <span>←</span> 목록
+        <span>←</span> Back
       </Link>
 
       {/* Post Header */}
@@ -125,46 +235,56 @@ export default function PostView() {
       {/* Comments Section */}
       <section>
         <h2 className="text-sm text-secondary mb-6">
-          댓글 ({comments.length})
+          Comments ({comments.length})
+          {aiGenerating && (
+            <span className="ml-2 text-muted text-xs animate-pulse">
+              AI generating...
+            </span>
+          )}
         </h2>
 
         {/* Comment List */}
         <div className="space-y-4 mb-8">
-          {comments.map((comment) => (
-            <CommentCard key={comment.id} comment={comment} />
+          {commentTree.map((comment) => (
+            <CommentCard
+              key={comment.id}
+              comment={comment}
+              onReply={handleReplySubmit}
+              replyingTo={replyingTo}
+              onStartReply={setReplyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+            />
           ))}
 
-          {comments.length === 0 && !isCommenting && (
-            <p className="text-muted text-sm py-4">아직 댓글이 없습니다</p>
+          {comments.length === 0 && !aiGenerating && (
+            <p className="text-muted text-sm py-4">No comments yet</p>
           )}
 
-          {isCommenting && (
-            <div className="comment-card comment-card--ai">
-              <p className="text-sm text-secondary mb-2">AI</p>
-              <p className="text-muted loading-dots">생각 중</p>
-            </div>
+          {comments.length === 0 && aiGenerating && (
+            <p className="text-muted text-sm py-4 animate-pulse">
+              AI personas are reading your post...
+            </p>
           )}
         </div>
 
         {/* Comment Input */}
         <CommentInput
           onSubmit={handleCommentSubmit}
-          placeholder="댓글을 남겨주세요..."
-          isLoading={isCommenting}
+          placeholder="Write a comment..."
         />
       </section>
 
       {/* Edit/Delete Buttons */}
       <div className="mt-12 pt-8 border-t border-border-light flex items-center gap-4">
         <Link to={`/edit/${post.id}`} className="btn-secondary text-sm">
-          수정
+          Edit
         </Link>
         <button
           onClick={handleDelete}
           disabled={deleting}
           className="text-sm text-muted hover:text-accent transition-colors"
         >
-          {deleting ? "삭제 중..." : "삭제"}
+          {deleting ? "Deleting..." : "Delete"}
         </button>
       </div>
     </div>

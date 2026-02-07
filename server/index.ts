@@ -31,7 +31,7 @@ function onlyLocalhost(req: express.Request, res: express.Response, next: expres
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", message: "Murmur server is running" });
+  res.json({ status: "ok", message: "Monolog server is running" });
 });
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
@@ -121,5 +121,5 @@ app.put("/api/personas", onlyLocalhost, (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🤫 Murmur server running on http://localhost:${PORT}`);
+  console.log(`🤫 Monolog server running on http://localhost:${PORT}`);
 });

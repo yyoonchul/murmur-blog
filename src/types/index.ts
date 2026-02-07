@@ -15,4 +15,18 @@ export interface Comment {
   parentId?: string;
   replies?: Comment[];
   isAI?: boolean;
+  personaEmoji?: string;
+  personaColor?: string;
+  personaBgColor?: string;
+  personaBorderColor?: string;
+}
+
+export interface PersonaInfo {
+  id: string;
+  name: string;
+  role: string;
+  emoji: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
 }

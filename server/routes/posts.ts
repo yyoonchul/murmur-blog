@@ -3,6 +3,9 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
+import { readComments, writeComments, getCommentsFilePath } from "../lib/commentsData.js";
+import type { Comment } from "../lib/commentsData.js";
+import { generateInitialComments, generateReply } from "../lib/comments.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,18 +19,12 @@ interface PostMeta {
   title: string;
   createdAt: string;
   updatedAt: string;
-  comments?: Comment[];
-}
-
-interface Comment {
-  id: string;
-  personaId: string;
-  content: string;
-  createdAt: string;
+  commentsFile: string;
 }
 
 interface Post extends PostMeta {
   content: string;
+  comments: Comment[];
 }
 
 // Ensure data directory exists
@@ -67,12 +64,20 @@ function deleteContent(id: string): void {
   }
 }
 
-// GET /api/posts - 전체 글 목록 (content 포함)
+function deleteComments(id: string): void {
+  const filePath = getCommentsFilePath(id);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
+
+// GET /api/posts - 전체 글 목록 (content, comments 포함)
 router.get("/", (_req, res) => {
   const metas = readMeta();
   const posts: Post[] = metas.map((meta) => ({
     ...meta,
     content: readContent(meta.id),
+    comments: readComments(meta.id),
   }));
   res.json(posts);
 });
@@ -88,6 +93,7 @@ router.get("/:id", (req, res) => {
   const post: Post = {
     ...meta,
     content: readContent(meta.id),
+    comments: readComments(meta.id),
   };
   res.json(post);
 });
@@ -109,14 +115,20 @@ router.post("/", (req, res) => {
     title,
     createdAt: now,
     updatedAt: now,
-    comments: [],
+    commentsFile: `${id}-comments.json`,
   };
 
   metas.unshift(newMeta);
   writeMeta(metas);
   writeContent(id, content);
+  writeComments(id, []); // 빈 댓글 파일 생성
 
-  res.status(201).json({ ...newMeta, content });
+  res.status(201).json({ ...newMeta, content, comments: [] });
+
+  // Fire-and-forget: generate AI comments in background
+  generateInitialComments(id, { title, content }).catch((err) => {
+    console.error(`[AI] Background comment generation failed for post ${id}:`, err);
+  });
 });
 
 // PUT /api/posts/:id - 글 수정
@@ -143,7 +155,7 @@ router.put("/:id", (req, res) => {
   writeMeta(metas);
   writeContent(req.params.id, content);
 
-  res.json({ ...metas[index], content });
+  res.json({ ...metas[index], content, comments: readComments(req.params.id) });
 });
 
 // DELETE /api/posts/:id - 글 삭제
@@ -159,21 +171,22 @@ router.delete("/:id", (req, res) => {
   metas.splice(index, 1);
   writeMeta(metas);
   deleteContent(id);
+  deleteComments(id); // 댓글 파일도 삭제
 
   res.json({ success: true });
 });
 
-// POST /api/posts/:id/comments - 댓글 추가
-router.post("/:id/comments", (req, res) => {
-  const { personaId, content } = req.body;
+// POST /api/posts/:id/comments - Add comment or reply (returns array: [userComment, ...aiReplies])
+router.post("/:id/comments", async (req, res) => {
+  const { personaId, content, parentId } = req.body;
   if (!personaId || !content) {
     res.status(400).json({ error: "personaId and content are required" });
     return;
   }
 
   const metas = readMeta();
-  const index = metas.findIndex((p) => p.id === req.params.id);
-  if (index === -1) {
+  const meta = metas.find((p) => p.id === req.params.id);
+  if (!meta) {
     res.status(404).json({ error: "Post not found" });
     return;
   }
@@ -183,15 +196,52 @@ router.post("/:id/comments", (req, res) => {
     personaId,
     content,
     createdAt: new Date().toISOString(),
+    ...(parentId && { parentId }),
   };
 
-  if (!metas[index].comments) {
-    metas[index].comments = [];
-  }
-  metas[index].comments!.push(comment);
-  writeMeta(metas);
+  const comments = readComments(req.params.id);
+  comments.push(comment);
+  writeComments(req.params.id, comments);
 
-  res.status(201).json(comment);
+  // If this is a user comment, generate AI reply
+  if (personaId === "user") {
+    try {
+      const postContent = readContent(meta.id);
+      const aiReplies = await generateReply(
+        req.params.id,
+        { title: meta.title, content: postContent },
+        comment
+      );
+      res.status(201).json([comment, ...aiReplies]);
+    } catch (err) {
+      console.error("[AI] Failed to generate reply:", err);
+      res.status(201).json([comment]);
+    }
+  } else {
+    res.status(201).json([comment]);
+  }
+});
+
+// POST /api/posts/:id/comments/generate - Manual trigger for AI comments
+router.post("/:id/comments/generate", async (req, res) => {
+  const metas = readMeta();
+  const meta = metas.find((p) => p.id === req.params.id);
+  if (!meta) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+
+  const existing = readComments(req.params.id);
+  if (existing.length > 0) {
+    res.status(409).json({ error: "Comments already exist for this post" });
+    return;
+  }
+
+  const postContent = readContent(meta.id);
+  await generateInitialComments(req.params.id, { title: meta.title, content: postContent });
+
+  const comments = readComments(req.params.id);
+  res.json({ comments });
 });
 
 export default router;

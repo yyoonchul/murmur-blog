@@ -55,7 +55,7 @@ export default function Editor() {
         navigate(`/post/${id}`);
       } else {
         const post = await createPost({ title: title.trim(), content: content.trim() });
-        navigate(`/post/${post.id}`);
+        navigate(`/post/${post.id}`, { state: { justCreated: true } });
       }
     } catch {
       setError("저장에 실패했습니다.");

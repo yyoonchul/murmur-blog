@@ -1,6 +1,14 @@
-import type { Post } from "../types";
+import type { Post, PersonaInfo } from "../types";
 
 const API_BASE = "/api";
+
+export interface ServerComment {
+  id: string;
+  personaId: string;
+  content: string;
+  createdAt: string;
+  parentId?: string;
+}
 
 export async function getPosts(): Promise<Post[]> {
   const res = await fetch(`${API_BASE}/posts`);
@@ -39,4 +47,35 @@ export async function deletePost(id: string): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete post");
+}
+
+export async function addComment(
+  postId: string,
+  data: { personaId: string; content: string; parentId?: string }
+): Promise<ServerComment[]> {
+  const res = await fetch(`${API_BASE}/posts/${postId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to add comment");
+  return res.json();
+}
+
+export async function getPersonas(): Promise<{
+  personas: PersonaInfo[];
+  feedbackOrder: string[];
+}> {
+  const res = await fetch(`${API_BASE}/personas`);
+  if (!res.ok) throw new Error("Failed to fetch personas");
+  return res.json();
+}
+
+export async function generateComments(postId: string): Promise<{ comments: ServerComment[] }> {
+  const res = await fetch(`${API_BASE}/posts/${postId}/comments/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error("Failed to generate comments");
+  return res.json();
 }
