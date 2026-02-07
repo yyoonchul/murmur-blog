@@ -11,7 +11,12 @@
       "bgColor": "#FEFCE8",
       "borderColor": "#FEF08A",
       "promptFile": "mina-reader.md",
-      "feedbackFocus": ["감정적 연결", "공감 포인트", "더 읽고 싶은 부분", "공유 가치"],
+      "feedbackFocus": [
+        "감정적 연결",
+        "공감 포인트",
+        "더 읽고 싶은 부분",
+        "공유 가치"
+      ],
       "personality": "따뜻함, 솔직한 리액션, 구체적 칭찬"
     },
     {
@@ -25,7 +30,12 @@
       "bgColor": "#FAF5FF",
       "borderColor": "#DDD6FE",
       "promptFile": "eunseo-writer.md",
-      "feedbackFocus": ["글쓴이의 보이스", "가장 빛나는 문장", "살짝 다듬을 부분", "흐름과 리듬"],
+      "feedbackFocus": [
+        "글쓴이의 보이스",
+        "가장 빛나는 문장",
+        "살짝 다듬을 부분",
+        "흐름과 리듬"
+      ],
       "personality": "다정함, 섬세함, 동료 의식"
     },
     {
@@ -39,7 +49,12 @@
       "bgColor": "#F9FAFB",
       "borderColor": "#E5E7EB",
       "promptFile": "jihoon-mentor.md",
-      "feedbackFocus": ["현실 검증", "균형 체크", "실행 가능성", "독자 가치"],
+      "feedbackFocus": [
+        "현실 검증",
+        "균형 체크",
+        "실행 가능성",
+        "독자 가치"
+      ],
       "personality": "침착함, 균형, 실용적"
     },
     {
@@ -53,7 +68,12 @@
       "bgColor": "#EFF6FF",
       "borderColor": "#BFDBFE",
       "promptFile": "suhyun-critic.md",
-      "feedbackFocus": ["숨은 전제", "논리적 비약", "반례", "정의의 모호함"],
+      "feedbackFocus": [
+        "숨은 전제",
+        "논리적 비약",
+        "반례",
+        "정의의 모호함"
+      ],
       "personality": "차분, 분석적, 질문형"
     },
     {
@@ -67,10 +87,21 @@
       "bgColor": "#FEF2F2",
       "borderColor": "#FECACA",
       "promptFile": "doyun-contrarian.md",
-      "feedbackFocus": ["정반대 주장", "컨센서스 경고", "생존자 편향", "강도 테스트"],
+      "feedbackFocus": [
+        "정반대 주장",
+        "컨센서스 경고",
+        "생존자 편향",
+        "강도 테스트"
+      ],
       "personality": "도발적, 유머, 지적 스파링"
     }
   ],
-  "feedbackOrder": ["mina", "eunseo", "jihoon", "suhyun", "doyun"],
+  "feedbackOrder": [
+    "mina",
+    "eunseo",
+    "jihoon",
+    "suhyun",
+    "doyun"
+  ],
   "feedbackOrderReason": "따뜻한 피드백으로 시작 → 중립 → 도전적. 글쓴이가 먼저 기분 좋은 피드백을 받고, 점점 날카로운 피드백을 받는 구조."
 }

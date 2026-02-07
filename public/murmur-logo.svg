@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@1,400;1,600&amp;display=swap');
+    </style>
+  </defs>
+  
+  <!-- Logo mark: speech bubble abstracted as quotation mark -->
+  <text x="20" y="88" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="80" fill="#D4602C" opacity="0.9">"</text>
+  
+  <!-- Wordmark -->
+  <text x="68" y="82" font-family="Newsreader, Georgia, 'Times New Roman', serif" font-style="italic" font-weight="600" font-size="56" fill="#1A1A1A" letter-spacing="-1">murmur</text>
+  
+  <!-- Subtle period as design element -->
+  <circle cx="352" cy="76" r="5" fill="#D4602C"/>
+</svg>

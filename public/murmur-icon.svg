@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- Background -->
+  <rect width="120" height="120" rx="24" fill="#1A1A1A"/>
+  
+  <!-- Quotation mark -->
+  <text x="12" y="62" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="52" fill="#D4602C" opacity="0.9">"</text>
+  
+  <!-- m letterform, properly centered -->
+  <text x="38" y="90" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="600" font-size="58" fill="#F5F1EB" letter-spacing="-1">m</text>
+</svg>

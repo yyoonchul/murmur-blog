@@ -8,10 +8,9 @@ export default function Header() {
   return (
     <header className="container-narrow py-8">
       <nav className="flex items-center justify-between">
-        <Link to="/">
-          <h1 className="font-display text-3xl font-semibold tracking-tight hover:text-accent transition-colors">
-            Murmur
-          </h1>
+        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
+          <h1 className="sr-only">Murmur</h1>
+          <img src="/murmur-logo.svg" alt="Murmur" className="h-10" />
         </Link>
         <div className="flex gap-6 text-sm text-secondary">
           <Link
