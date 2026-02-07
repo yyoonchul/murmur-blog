@@ -4,11 +4,10 @@ node_modules/
 # Build
 dist/
 
-# # Data files (personal posts, settings with API key)
- server/data/posts.json
- server/data/comments.json
- server/data/settings.json
-
+# Data files (personal posts, settings with API key)
+server/data/posts.json
+server/data/comments.json
+server/data/settings.json
 
 # Logs
 *.log
