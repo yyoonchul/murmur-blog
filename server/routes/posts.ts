@@ -126,8 +126,9 @@ router.post("/", (req, res) => {
   res.status(201).json({ ...newMeta, content, comments: [] });
 
   // Fire-and-forget: generate AI comments in background
+  console.log(`[ROUTE] POST /api/posts - Response sent. Starting background AI generation for post ${id}...`);
   generateInitialComments(id, { title, content }).catch((err) => {
-    console.error(`[AI] Background comment generation failed for post ${id}:`, err);
+    console.error(`[ROUTE] Background comment generation FAILED for post ${id}:`, err);
   });
 });
 

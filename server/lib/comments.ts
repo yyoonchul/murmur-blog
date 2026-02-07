@@ -67,18 +67,38 @@ export async function generateInitialComments(
   postId: string,
   post: { title: string; content: string }
 ): Promise<void> {
+  console.log(`[AI] generateInitialComments START for post ${postId}`);
+  console.log(`[AI] Post title: "${post.title}", content length: ${post.content.length}`);
+
   const { personas, feedbackOrder } = readPersonas();
+  console.log(`[AI] Loaded ${personas.length} personas, feedbackOrder: [${feedbackOrder.join(", ")}]`);
+
+  if (personas.length === 0) {
+    console.error("[AI] ERROR: No personas loaded! Check personas.json and .md files");
+    return;
+  }
+
   const personaMap = new Map(personas.map((p) => [p.id, p.name]));
 
   // Generate initial comments in feedbackOrder
   for (const personaId of feedbackOrder) {
     const persona = personas.find((p) => p.id === personaId);
-    if (!persona) continue;
+    if (!persona) {
+      console.warn(`[AI] Persona not found for id: ${personaId}, skipping`);
+      continue;
+    }
+
+    console.log(`[AI] Generating initial comment for ${personaId} (${persona.name})...`);
+    console.log(`[AI]   promptContent length: ${persona.promptContent.length}`);
 
     try {
       const system = buildSystemPrompt("initial", persona.promptContent);
       const userMessage = buildUserMessage(post);
+      console.log(`[AI]   System prompt length: ${system.length}, user message length: ${userMessage.length}`);
+      console.log(`[AI]   Calling sendMessage...`);
+
       const content = await sendMessage(userMessage, { system, maxTokens: 300 });
+      console.log(`[AI]   sendMessage returned: "${content.substring(0, 100)}..." (length: ${content.length})`);
 
       if (content.trim()) {
         const comment: Comment = {
@@ -90,27 +110,43 @@ export async function generateInitialComments(
         const comments = readComments(postId);
         comments.push(comment);
         writeComments(postId, comments);
+        console.log(`[AI]   Comment saved. Total comments now: ${comments.length}`);
+      } else {
+        console.warn(`[AI]   Empty response from LLM for ${personaId}`);
       }
     } catch (err) {
-      console.error(`[AI] Failed to generate initial comment for ${personaId}:`, err);
+      console.error(`[AI] FAILED to generate initial comment for ${personaId}:`, err);
     }
   }
 
   // Generate inter-persona replies (2 out of 3 rules)
   const replyRules = pickInterPersonaReplies(2);
+  console.log(`[AI] Inter-persona reply rules selected:`, replyRules.map(r => `${r.replier}→${r.target}`));
+
   for (const rule of replyRules) {
     const replier = personas.find((p) => p.id === rule.replier);
-    if (!replier) continue;
+    if (!replier) {
+      console.warn(`[AI] Replier persona not found: ${rule.replier}`);
+      continue;
+    }
 
     const comments = readComments(postId);
     const targetComment = comments.find((c) => c.personaId === rule.target && !c.parentId);
-    if (!targetComment) continue;
+    if (!targetComment) {
+      console.warn(`[AI] Target comment not found for ${rule.target} (no top-level comment)`);
+      continue;
+    }
+
+    console.log(`[AI] Generating inter-persona reply: ${rule.replier} → ${rule.target}...`);
 
     try {
       const system = buildSystemPrompt("reply", replier.promptContent);
       const threadContext = buildThreadContext(comments, targetComment.id, personaMap);
       const userMessage = buildUserMessage(post, threadContext);
+      console.log(`[AI]   Calling sendMessage for reply...`);
+
       const content = await sendMessage(userMessage, { system, maxTokens: 300 });
+      console.log(`[AI]   Reply response: "${content.substring(0, 100)}..." (length: ${content.length})`);
 
       if (content.trim()) {
         const reply: Comment = {
@@ -123,11 +159,17 @@ export async function generateInitialComments(
         const updatedComments = readComments(postId);
         updatedComments.push(reply);
         writeComments(postId, updatedComments);
+        console.log(`[AI]   Reply saved. Total comments now: ${updatedComments.length}`);
+      } else {
+        console.warn(`[AI]   Empty reply response for ${rule.replier}→${rule.target}`);
       }
     } catch (err) {
-      console.error(`[AI] Failed to generate inter-persona reply (${rule.replier} → ${rule.target}):`, err);
+      console.error(`[AI] FAILED inter-persona reply (${rule.replier} → ${rule.target}):`, err);
     }
   }
+
+  const finalComments = readComments(postId);
+  console.log(`[AI] generateInitialComments DONE for post ${postId}. Total comments: ${finalComments.length}`);
 }
 
 export async function generateReply(
@@ -135,6 +177,9 @@ export async function generateReply(
   post: { title: string; content: string },
   userComment: Comment
 ): Promise<Comment[]> {
+  console.log(`[AI] generateReply START for post ${postId}, userComment: ${userComment.id}`);
+  console.log(`[AI]   userComment.parentId: ${userComment.parentId || "(none, top-level)"}`);
+
   const aiReplies: Comment[] = [];
   const { personas } = readPersonas();
   const personaMap = new Map(personas.map((p) => [p.id, p.name]));
@@ -147,26 +192,35 @@ export async function generateReply(
     const parentComment = comments.find((c) => c.id === userComment.parentId);
     if (parentComment && parentComment.personaId !== "user") {
       responderId = parentComment.personaId;
+      console.log(`[AI]   Responding as parent's persona: ${responderId}`);
     } else {
       // Parent is user or not found — pick random persona
       const randomIndex = Math.floor(Math.random() * personas.length);
       responderId = personas[randomIndex].id;
+      console.log(`[AI]   Parent is user/not-found, random persona: ${responderId}`);
     }
   } else {
     // Top-level user comment — pick random persona
     const randomIndex = Math.floor(Math.random() * personas.length);
     responderId = personas[randomIndex].id;
+    console.log(`[AI]   Top-level comment, random persona: ${responderId}`);
   }
 
   const responder = personas.find((p) => p.id === responderId);
-  if (!responder) return aiReplies;
+  if (!responder) {
+    console.error(`[AI]   Responder persona not found: ${responderId}`);
+    return aiReplies;
+  }
 
   try {
     const comments = readComments(postId);
     const system = buildSystemPrompt("reply", responder.promptContent);
     const threadContext = buildThreadContext(comments, userComment.id, personaMap);
     const userMessage = buildUserMessage(post, threadContext);
+    console.log(`[AI]   Calling sendMessage for reply from ${responderId}...`);
+
     const content = await sendMessage(userMessage, { system, maxTokens: 300 });
+    console.log(`[AI]   Reply response: "${content.substring(0, 100)}..." (length: ${content.length})`);
 
     if (content.trim()) {
       const reply: Comment = {
@@ -180,10 +234,14 @@ export async function generateReply(
       updatedComments.push(reply);
       writeComments(postId, updatedComments);
       aiReplies.push(reply);
+      console.log(`[AI]   Reply saved from ${responderId}. Total comments: ${updatedComments.length}`);
+    } else {
+      console.warn(`[AI]   Empty reply from ${responderId}`);
     }
   } catch (err) {
-    console.error(`[AI] Failed to generate reply from ${responderId}:`, err);
+    console.error(`[AI] FAILED to generate reply from ${responderId}:`, err);
   }
 
+  console.log(`[AI] generateReply DONE. AI replies count: ${aiReplies.length}`);
   return aiReplies;
 }

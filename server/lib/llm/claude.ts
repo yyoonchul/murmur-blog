@@ -54,17 +54,36 @@ export async function sendMessage(
     maxTokens = 4096,
   } = options;
 
-  const client = getClient();
-  const message = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    ...(system && { system }),
-    messages: [{ role: "user", content: userMessage }],
-  });
+  console.log(`[LLM] sendMessage called. model: ${model}, maxTokens: ${maxTokens}, system length: ${system?.length ?? 0}, userMessage length: ${userMessage.length}`);
 
-  // Extract text from the response
-  const textBlock = message.content.find((block) => block.type === "text");
-  return textBlock ? textBlock.text : "";
+  let client: Anthropic;
+  try {
+    client = getClient();
+    console.log(`[LLM] Anthropic client created successfully`);
+  } catch (err) {
+    console.error(`[LLM] FAILED to create Anthropic client:`, err);
+    throw err;
+  }
+
+  try {
+    const message = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      ...(system && { system }),
+      messages: [{ role: "user", content: userMessage }],
+    });
+
+    console.log(`[LLM] API response received. stop_reason: ${message.stop_reason}, content blocks: ${message.content.length}`);
+
+    // Extract text from the response
+    const textBlock = message.content.find((block) => block.type === "text");
+    const result = textBlock ? textBlock.text : "";
+    console.log(`[LLM] Extracted text length: ${result.length}`);
+    return result;
+  } catch (err) {
+    console.error(`[LLM] API call FAILED:`, err);
+    throw err;
+  }
 }
 
 /**
