@@ -10,15 +10,11 @@ export interface Persona {
   id: string;
   name: string;
   role: string;
-  tone: string;
-  description: string;
   emoji: string;
   color: string;
   bgColor: string;
   borderColor: string;
   promptFile: string;
-  feedbackFocus: string[];
-  personality: string;
 }
 
 export interface PersonaWithPrompt extends Persona {

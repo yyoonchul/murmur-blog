@@ -34,28 +34,73 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", message: "Murmur server is running" });
 });
 
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_AVAILABLE_MODELS = [
+  { id: "claude-opus-4-6-20250415", name: "Claude Opus 4.6", description: "Our most intelligent model", inputPrice: "$5 / MTok", outputPrice: "$25 / MTok" },
+  { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", description: "Best speed and intelligence", inputPrice: "$3 / MTok", outputPrice: "$15 / MTok" },
+  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", description: "Fastest model", inputPrice: "$1 / MTok", outputPrice: "$5 / MTok" },
+];
+
 app.get("/api/settings", onlyLocalhost, (_req, res) => {
   const settings = readSettings();
-  const apiKey = settings.ANTHROPIC_API_KEY;
+  const availableModels = settings.AVAILABLE_MODELS || DEFAULT_AVAILABLE_MODELS;
+  const reservedKeys = ["MODEL", "AVAILABLE_MODELS"];
+  const apiKeys = Object.entries(settings)
+    .filter(([key, value]) => !reservedKeys.includes(key) && typeof value === "string")
+    .map(([name, value]) => ({
+      name,
+      masked: typeof value === "string" && value.length > 11
+        ? `${value.slice(0, 7)}...${value.slice(-4)}`
+        : "***",
+    }));
+
   res.json({
-    apiKeyConfigured: Boolean(apiKey),
-    apiKeyMasked: apiKey ? `${apiKey.slice(0, 7)}...${apiKey.slice(-4)}` : null,
+    apiKeys,
+    model: settings.MODEL || DEFAULT_MODEL,
+    availableModels,
   });
 });
 
 app.put("/api/settings", onlyLocalhost, (req, res) => {
-  const { apiKey } = req.body ?? {};
+  const { apiKey, apiKeyName, model, deleteApiKey, renameFrom } = req.body ?? {};
   const settings = readSettings();
-  if (typeof apiKey === "string" && apiKey.trim()) {
-    settings.ANTHROPIC_API_KEY = apiKey.trim();
-    writeSettings(settings);
+  const keyName = apiKeyName || "ANTHROPIC_API_KEY";
+
+  if (deleteApiKey === true) {
+    delete settings[keyName];
+  } else if (renameFrom && renameFrom !== keyName) {
+    // Rename: copy old value to new key, delete old key
+    const oldValue = settings[renameFrom];
+    if (oldValue) {
+      settings[keyName] = apiKey?.trim() || oldValue;
+      delete settings[renameFrom];
+    }
+  } else if (typeof apiKey === "string" && apiKey.trim()) {
+    settings[keyName] = apiKey.trim();
   }
+
+  if (typeof model === "string" && model.trim()) {
+    settings.MODEL = model.trim();
+  }
+  writeSettings(settings);
+
+  // Build apiKeys array from all keys that look like API keys (exclude MODEL, AVAILABLE_MODELS)
   const updated = readSettings();
+  const availableModels = updated.AVAILABLE_MODELS || DEFAULT_AVAILABLE_MODELS;
+  const reservedKeys = ["MODEL", "AVAILABLE_MODELS"];
+  const apiKeys = Object.entries(updated)
+    .filter(([key, value]) => !reservedKeys.includes(key) && typeof value === "string")
+    .map(([name, value]) => ({
+      name,
+      masked: typeof value === "string" && value.length > 11
+        ? `${value.slice(0, 7)}...${value.slice(-4)}`
+        : "***",
+    }));
+
   res.json({
-    apiKeyConfigured: Boolean(updated.ANTHROPIC_API_KEY),
-    apiKeyMasked: updated.ANTHROPIC_API_KEY
-      ? `${updated.ANTHROPIC_API_KEY.slice(0, 7)}...${updated.ANTHROPIC_API_KEY.slice(-4)}`
-      : null,
+    apiKeys,
+    model: updated.MODEL || DEFAULT_MODEL,
+    availableModels,
   });
 });
 

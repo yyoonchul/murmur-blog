@@ -1,0 +1,36 @@
+{
+  "ANTHROPIC_API_KEY": "",
+  "MODEL": "claude-haiku-4-5-20251001",
+  "AVAILABLE_MODELS": [
+    {
+      "id": "claude-opus-4-5-20251101",
+      "name": "Claude Opus 4.5",
+      "description": "Our most intelligent model for building agents and coding",
+      "inputPrice": "$15 / MTok",
+      "outputPrice": "$75 / MTok",
+      "contextWindow": "200K tokens",
+      "maxOutput": "32K tokens",
+      "latency": "Moderate"
+    },
+    {
+      "id": "claude-sonnet-4-5-20250929",
+      "name": "Claude Sonnet 4.5",
+      "description": "Our best combination of speed and intelligence",
+      "inputPrice": "$3 / MTok",
+      "outputPrice": "$15 / MTok",
+      "contextWindow": "200K (1M beta)",
+      "maxOutput": "64K tokens",
+      "latency": "Fast"
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "name": "Claude Haiku 4.5",
+      "description": "Our fastest model with near-frontier intelligence",
+      "inputPrice": "$1 / MTok",
+      "outputPrice": "$5 / MTok",
+      "contextWindow": "200K tokens",
+      "maxOutput": "64K tokens",
+      "latency": "Fastest"
+    }
+  ]
+}

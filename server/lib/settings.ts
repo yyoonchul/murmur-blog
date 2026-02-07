@@ -5,7 +5,10 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SETTINGS_PATH = path.join(__dirname, "..", "data", "settings.json");
 
-function readSettings(): Record<string, string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SettingsData = Record<string, any>;
+
+function readSettings(): SettingsData {
   try {
     const raw = fs.readFileSync(SETTINGS_PATH, "utf-8");
     const data = JSON.parse(raw);
@@ -15,7 +18,7 @@ function readSettings(): Record<string, string> {
   }
 }
 
-export function writeSettings(settings: Record<string, string>) {
+export function writeSettings(settings: SettingsData) {
   fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true });
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2), "utf-8");
 }

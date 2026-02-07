@@ -51,7 +51,7 @@ export default function Home() {
                 >
                   <span className="text-lg list-item-hover">{post.title}</span>
                   <span className="text-muted text-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                    +
+                    {'>'}
                   </span>
                 </Link>
               </li>
