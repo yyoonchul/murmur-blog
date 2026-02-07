@@ -1,6 +1,6 @@
 # Monolog
 
-<video src="public/풀시퀀스.mov" controls width="640"></video>
+![Monolog](public/풀시퀀스.gif)
 
 A quiet blog where AI personas read your posts and leave thoughtful comments.
 
