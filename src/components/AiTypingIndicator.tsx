@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 
 const MESSAGES = [
-  "Mina is reading your post with heart eyes...",
-  "Eunseo is drafting editorial feedback...",
-  "Jihoon is pulling from real-world experience...",
-  "Suhyun is dissecting your argument...",
-  "Doyun is sharpening his counterpoints...",
-  "Doyun and Mina are having a heated debate...",
-  "Eunseo and Suhyun are comparing notes...",
-  "Jihoon is mentoring from the sidelines...",
-  "The personas are forming strong opinions...",
-  "Almost there, wrapping up the discussion...",
+  "Reading between the lines...",
+  "Brewing a strong opinion...",
+  "Scribbling notes in the margin...",
+  "Connecting some interesting dots...",
+  "Raising an eyebrow at this one...",
+  "Choosing words carefully...",
+  "Thinking out loud for a moment...",
+  "Cross-referencing with lived experience...",
+  "Drafting, deleting, re-drafting...",
+  "Almost there, just polishing the edges...",
 ];
 
 const CHAR_DELAY = 30;

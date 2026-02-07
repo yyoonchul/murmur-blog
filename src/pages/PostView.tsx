@@ -190,7 +190,7 @@ export default function PostView() {
 
     setComments((prev) => [...prev, optimisticReply]);
     setReplyingTo(null);
-    setGeneratingReplyFor(tempId);
+    setGeneratingReplyFor(parentId);
 
     try {
       const savedArr = await addComment(post.id, { personaId: "user", content, parentId });
