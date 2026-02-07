@@ -4,6 +4,7 @@ node_modules/
 # Build
 dist/
 
+.env
 
 # # Data files (personal posts, settings with API key)
 # server/data/posts.json
