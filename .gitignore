@@ -5,9 +5,9 @@ node_modules/
 dist/
 
 # # Data files (personal posts, settings with API key)
-# server/data/posts.json
-# server/data/comments.json
-# server/data/settings.json
+ server/data/posts.json
+ server/data/comments.json
+ server/data/settings.json
 
 
 # Logs
