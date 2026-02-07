@@ -1,11 +1,17 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { createServer as createViteServer } from "vite";
 import { getApiKey, readSettings, writeSettings } from "./lib/settings.js";
 import { readPersonas, writePersonas } from "./lib/personas.js";
 import postsRouter from "./routes/posts.js";
 
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isDev = process.env.NODE_ENV !== "production";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -120,6 +126,21 @@ app.put("/api/personas", onlyLocalhost, (req, res) => {
   res.json(saved);
 });
 
-app.listen(PORT, () => {
-  console.log(`🤫 Monolog server running on http://localhost:${PORT}`);
-});
+async function start() {
+  if (isDev) {
+    const vite = await createViteServer({ server: { middlewareMode: true } });
+    app.use(vite.middlewares);
+  } else {
+    const dist = path.join(__dirname, "../dist");
+    app.use(express.static(dist));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(dist, "index.html"));
+    });
+  }
+
+  app.listen(PORT, () => {
+    console.log(`🤫 Monolog server running on http://localhost:${PORT}`);
+  });
+}
+
+start();

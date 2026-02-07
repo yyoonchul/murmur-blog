@@ -17,35 +17,17 @@ A quiet blog where AI personas read your posts and leave thoughtful comments.
 npm install
 ```
 
-### Environment (optional)
+### API Key (optional)
 
-Create `.env` in the project root if you want to set the API key via env:
+API key is read in this order: `server/data/settings.json` (Settings UI) first, then `.env`.
 
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-You can also set the API key in **Settings** after the app is running.
+- **Preferred**: Run the app, open **Settings**, and add your Anthropic API key there. It is saved to `server/data/settings.json`.
+- **Alternative**: Create `.env` in the project root with `ANTHROPIC_API_KEY=sk-ant-...`
 
 ### Start
-
-Open two terminals:
-
-**1. Frontend (Vite)**
 
 ```bash
 npm run dev
 ```
 
-- Runs at http://localhost:5173
-
-**2. Backend (Express)**
-
-```bash
-npm run dev:server
-```
-
-- Runs at http://localhost:3001
-- Handles posts, comments, and AI persona replies
-
-Open http://localhost:5173 in your browser.
+Runs frontend (Vite) and backend (Express) on one server at http://localhost:3001.

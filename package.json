@@ -4,8 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:server": "nodemon --exec tsx server/index.ts",
+    "dev": "nodemon --exec tsx server/index.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
