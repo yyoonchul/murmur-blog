@@ -1,5 +1,7 @@
+import { marked } from "marked";
 import type { Comment } from "../types";
 import CommentInput from "./CommentInput";
+import AiTypingIndicator from "./AiTypingIndicator";
 
 interface CommentCardProps {
   comment: Comment;
@@ -7,6 +9,7 @@ interface CommentCardProps {
   replyingTo?: string | null;
   onStartReply?: (commentId: string) => void;
   onCancelReply?: () => void;
+  isGeneratingReply?: boolean;
 }
 
 export default function CommentCard({
@@ -15,6 +18,7 @@ export default function CommentCard({
   replyingTo,
   onStartReply,
   onCancelReply,
+  isGeneratingReply,
 }: CommentCardProps) {
   const isAI = comment.isAI ?? true;
   const isReplying = replyingTo === comment.id;
@@ -28,6 +32,8 @@ export default function CommentCard({
   const borderStyle = isAI && comment.personaBorderColor
     ? { borderLeftColor: comment.personaBorderColor }
     : {};
+
+  const renderedContent = marked.parse(comment.content) as string;
 
   return (
     <div
@@ -46,7 +52,10 @@ export default function CommentCard({
           comment.persona
         )}
       </p>
-      <p className="text-primary leading-relaxed whitespace-pre-wrap">{comment.content}</p>
+      <div
+        className="comment-markdown text-primary leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: renderedContent }}
+      />
 
       {/* Reply button */}
       {onStartReply && !isReplying && (
@@ -78,33 +87,44 @@ export default function CommentCard({
       {/* Nested replies */}
       {comment.replies && comment.replies.length > 0 && (
         <div className="mt-4 space-y-3">
-          {comment.replies.map((reply) => (
-            <div
-              key={reply.id}
-              className="ml-6 pl-4 border-l-2"
-              style={
-                reply.isAI && reply.personaBorderColor
-                  ? { borderLeftColor: reply.personaBorderColor }
-                  : reply.isAI
-                  ? { borderLeftColor: "var(--color-border-dark, #d1d5db)" }
-                  : { borderLeftColor: "#fde68a" }
-              }
-            >
-              <p className="text-sm text-secondary mb-1">
-                {reply.isAI && reply.personaEmoji && (
-                  <span className="mr-1">{reply.personaEmoji}</span>
-                )}
-                {reply.isAI && reply.personaColor ? (
-                  <span style={{ color: reply.personaColor }}>{reply.persona}</span>
-                ) : (
-                  reply.persona
-                )}
-              </p>
-              <p className="text-primary text-sm leading-relaxed whitespace-pre-wrap">
-                {reply.content}
-              </p>
-            </div>
-          ))}
+          {comment.replies.map((reply) => {
+            const replyHtml = marked.parse(reply.content) as string;
+            return (
+              <div
+                key={reply.id}
+                className="ml-6 pl-4 border-l-2"
+                style={
+                  reply.isAI && reply.personaBorderColor
+                    ? { borderLeftColor: reply.personaBorderColor }
+                    : reply.isAI
+                    ? { borderLeftColor: "var(--color-border-dark, #d1d5db)" }
+                    : { borderLeftColor: "#fde68a" }
+                }
+              >
+                <p className="text-sm text-secondary mb-1">
+                  {reply.isAI && reply.personaEmoji && (
+                    <span className="mr-1">{reply.personaEmoji}</span>
+                  )}
+                  {reply.isAI && reply.personaColor ? (
+                    <span style={{ color: reply.personaColor }}>{reply.persona}</span>
+                  ) : (
+                    reply.persona
+                  )}
+                </p>
+                <div
+                  className="comment-markdown text-primary text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: replyHtml }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* AI generating reply indicator */}
+      {isGeneratingReply && (
+        <div className="mt-4 ml-6 pl-4 border-l-2" style={{ borderLeftColor: "var(--color-border-dark, #d1d5db)" }}>
+          <AiTypingIndicator compact />
         </div>
       )}
     </div>

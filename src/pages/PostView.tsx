@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { marked } from "marked";
 import CommentCard from "../components/CommentCard";
 import CommentInput from "../components/CommentInput";
+import AiTypingIndicator from "../components/AiTypingIndicator";
 import { getPost, deletePost, addComment, getPersonas } from "../services/api";
 import type { ServerComment } from "../services/api";
 import type { Post, Comment, PersonaInfo } from "../types";
@@ -46,6 +47,7 @@ export default function PostView() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [personaMap, setPersonaMap] = useState<PersonaMap>(new Map());
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [generatingReplyFor, setGeneratingReplyFor] = useState<string | null>(null);
 
   const justCreated = (location.state as { justCreated?: boolean })?.justCreated === true;
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -144,25 +146,64 @@ export default function PostView() {
   const handleCommentSubmit = async (content: string) => {
     if (!post) return;
 
+    const tempId = `temp-${Date.now()}`;
+    const optimisticComment: Comment = {
+      id: tempId,
+      postId: post.id,
+      persona: "Me",
+      content,
+      createdAt: new Date().toISOString(),
+      isAI: false,
+    };
+
+    setComments((prev) => [...prev, optimisticComment]);
+    setGeneratingReplyFor(tempId);
+
     try {
       const savedArr = await addComment(post.id, { personaId: "user", content });
       const newComments = transformComments(savedArr, post.id, personaMap);
-      setComments((prev) => [...prev, ...newComments]);
+      setComments((prev) => {
+        const withoutOptimistic = prev.filter((c) => c.id !== tempId);
+        return [...withoutOptimistic, ...newComments];
+      });
     } catch (err) {
       console.error("Failed to add comment:", err);
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+    } finally {
+      setGeneratingReplyFor(null);
     }
   };
 
   const handleReplySubmit = async (parentId: string, content: string) => {
     if (!post) return;
 
+    const tempId = `temp-${Date.now()}`;
+    const optimisticReply: Comment = {
+      id: tempId,
+      postId: post.id,
+      persona: "Me",
+      content,
+      createdAt: new Date().toISOString(),
+      isAI: false,
+      parentId,
+    };
+
+    setComments((prev) => [...prev, optimisticReply]);
+    setReplyingTo(null);
+    setGeneratingReplyFor(tempId);
+
     try {
       const savedArr = await addComment(post.id, { personaId: "user", content, parentId });
       const newComments = transformComments(savedArr, post.id, personaMap);
-      setComments((prev) => [...prev, ...newComments]);
-      setReplyingTo(null);
+      setComments((prev) => {
+        const withoutOptimistic = prev.filter((c) => c.id !== tempId);
+        return [...withoutOptimistic, ...newComments];
+      });
     } catch (err) {
       console.error("Failed to add reply:", err);
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+    } finally {
+      setGeneratingReplyFor(null);
     }
   };
 
@@ -237,8 +278,8 @@ export default function PostView() {
         <h2 className="text-sm text-secondary mb-6">
           Comments ({comments.length})
           {aiGenerating && (
-            <span className="ml-2 text-muted text-xs animate-pulse">
-              AI generating...
+            <span className="ml-2">
+              <AiTypingIndicator compact />
             </span>
           )}
         </h2>
@@ -253,6 +294,7 @@ export default function PostView() {
               replyingTo={replyingTo}
               onStartReply={setReplyingTo}
               onCancelReply={() => setReplyingTo(null)}
+              isGeneratingReply={generatingReplyFor === comment.id}
             />
           ))}
 
@@ -261,9 +303,7 @@ export default function PostView() {
           )}
 
           {comments.length === 0 && aiGenerating && (
-            <p className="text-muted text-sm py-4 animate-pulse">
-              AI personas are reading your post...
-            </p>
+            <AiTypingIndicator />
           )}
         </div>
 
