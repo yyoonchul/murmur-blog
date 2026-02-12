@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PERSONA_DIR = path.join(__dirname, "..", "data", "persona");
 const PERSONAS_JSON = path.join(PERSONA_DIR, "personas.json");
+const LIBRARY_JSON = path.join(PERSONA_DIR, "library", "library.json");
 
 export interface Persona {
   id: string;
@@ -35,11 +36,17 @@ interface PersonasJsonData {
 
 /**
  * Validate that a promptFile is safe (no directory traversal, ends with .md)
+ * Allows "library/filename.md" format for library presets
  */
 function isSafePromptFile(promptFile: string): boolean {
   if (!promptFile || typeof promptFile !== "string") return false;
   if (!promptFile.endsWith(".md")) return false;
-  if (promptFile.includes("..") || promptFile.includes("/") || promptFile.includes("\\")) return false;
+  if (promptFile.includes("..")) return false;
+  // Allow only library/ subdirectory or root-level files
+  const parts = promptFile.split("/");
+  if (parts.length > 2) return false; // Too many levels
+  if (parts.length === 2 && parts[0] !== "library") return false; // Only library/ allowed
+  if (promptFile.includes("\\")) return false;
   return true;
 }
 
@@ -92,8 +99,10 @@ export function readPersonas(): PersonasData {
 export function writePersonas(payload: PersonasData): void {
   const { personas, feedbackOrder, feedbackOrderReason } = payload;
 
-  // Write each .md file
+  // Write each .md file (only for non-library personas)
   for (const persona of personas) {
+    // Don't write to library/ directory - those are read-only presets
+    if (persona.promptFile.startsWith("library/")) continue;
     const promptPath = resolvePromptPath(persona.promptFile);
     if (promptPath && typeof persona.promptContent === "string") {
       fs.writeFileSync(promptPath, persona.promptContent, "utf-8");
@@ -108,4 +117,118 @@ export function writePersonas(payload: PersonasData): void {
   };
 
   fs.writeFileSync(PERSONAS_JSON, JSON.stringify(jsonData, null, 2), "utf-8");
+}
+
+// ========== Library Functions ==========
+
+export interface LibraryPersona extends Persona {
+  description: string;
+}
+
+export interface PersonaLibrary {
+  presets: LibraryPersona[];
+}
+
+export interface LibraryPersonaWithStatus extends LibraryPersona {
+  isActive: boolean;
+  promptContent: string;
+}
+
+/**
+ * Read the persona library (presets)
+ */
+export function readLibrary(): PersonaLibrary {
+  try {
+    const raw = fs.readFileSync(LIBRARY_JSON, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return { presets: [] };
+  }
+}
+
+/**
+ * Get library with active status and prompt content
+ */
+export function readLibraryWithStatus(): { presets: LibraryPersonaWithStatus[] } {
+  const library = readLibrary();
+  const active = readPersonas();
+  const activeIds = new Set(active.personas.map((p) => p.id));
+
+  return {
+    presets: library.presets.map((p) => {
+      let promptContent = "";
+      const promptPath = resolvePromptPath(p.promptFile);
+      if (promptPath) {
+        try {
+          promptContent = fs.readFileSync(promptPath, "utf-8");
+        } catch {
+          promptContent = "";
+        }
+      }
+      return {
+        ...p,
+        isActive: activeIds.has(p.id),
+        promptContent,
+      };
+    }),
+  };
+}
+
+/**
+ * Add a persona from the library to active personas
+ */
+export function addPersonaFromLibrary(personaId: string): PersonasData | null {
+  const library = readLibrary();
+  const preset = library.presets.find((p) => p.id === personaId);
+  if (!preset) return null;
+
+  const data = readPersonas();
+  if (data.personas.some((p) => p.id === personaId)) {
+    return null; // Already active
+  }
+
+  // Read prompt content from library
+  const promptPath = resolvePromptPath(preset.promptFile);
+  let promptContent = "";
+  if (promptPath) {
+    try {
+      promptContent = fs.readFileSync(promptPath, "utf-8");
+    } catch {
+      promptContent = "";
+    }
+  }
+
+  // Add to active personas (reference library file directly)
+  const newPersona: PersonaWithPrompt = {
+    id: preset.id,
+    name: preset.name,
+    role: preset.role,
+    emoji: preset.emoji,
+    color: preset.color,
+    bgColor: preset.bgColor,
+    borderColor: preset.borderColor,
+    promptFile: preset.promptFile, // Keep library/ path
+    promptContent,
+  };
+
+  data.personas.push(newPersona);
+  data.feedbackOrder.push(personaId);
+  writePersonas(data);
+
+  return readPersonas();
+}
+
+/**
+ * Remove a persona from active personas
+ */
+export function removePersona(personaId: string): PersonasData | null {
+  const data = readPersonas();
+  const index = data.personas.findIndex((p) => p.id === personaId);
+  if (index === -1) return null;
+
+  data.personas.splice(index, 1);
+  data.feedbackOrder = data.feedbackOrder.filter((id) => id !== personaId);
+  writePersonas(data);
+
+  return readPersonas();
 }

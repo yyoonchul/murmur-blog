@@ -2,8 +2,8 @@
   "personas": [
     {
       "id": "mina",
-      "name": "민아",
-      "role": "첫 번째 독자",
+      "name": "Mina",
+      "role": "First Reader",
       "emoji": "💛",
       "color": "#CA8A04",
       "bgColor": "#FEFCE8",
@@ -12,8 +12,8 @@
     },
     {
       "id": "eunseo",
-      "name": "은서",
-      "role": "글쓰기 동료",
+      "name": "Grace",
+      "role": "Writing Companion",
       "emoji": "✒️",
       "color": "#7C3AED",
       "bgColor": "#FAF5FF",
@@ -22,8 +22,8 @@
     },
     {
       "id": "jihoon",
-      "name": "지훈",
-      "role": "실무 멘토",
+      "name": "James",
+      "role": "Practical Mentor",
       "emoji": "⚖️",
       "color": "#6B7280",
       "bgColor": "#F9FAFB",
@@ -32,8 +32,8 @@
     },
     {
       "id": "suhyun",
-      "name": "수현",
-      "role": "논증 비평가",
+      "name": "Sam",
+      "role": "Logic Critic",
       "emoji": "🔬",
       "color": "#2563EB",
       "bgColor": "#EFF6FF",
@@ -41,14 +41,24 @@
       "promptFile": "suhyun-critic.md"
     },
     {
-      "id": "doyun",
-      "name": "도윤",
-      "role": "반대론자",
-      "emoji": "⚡",
-      "color": "#DC2626",
-      "bgColor": "#FEF2F2",
-      "borderColor": "#FECACA",
-      "promptFile": "doyun-contrarian.md"
+      "id": "philosopher",
+      "name": "Sophia",
+      "role": "Philosopher",
+      "emoji": "🔭",
+      "color": "#8B5CF6",
+      "bgColor": "#F5F3FF",
+      "borderColor": "#DDD6FE",
+      "promptFile": "library/philosopher.md"
+    },
+    {
+      "id": "artist",
+      "name": "Luna",
+      "role": "Artist",
+      "emoji": "🎨",
+      "color": "#EC4899",
+      "bgColor": "#FDF2F8",
+      "borderColor": "#FBCFE8",
+      "promptFile": "library/artist.md"
     }
   ],
   "feedbackOrder": [
@@ -56,7 +66,8 @@
     "eunseo",
     "jihoon",
     "suhyun",
-    "doyun"
+    "philosopher",
+    "artist"
   ],
-  "feedbackOrderReason": "따뜻한 피드백으로 시작 → 중립 → 도전적. 글쓴이가 먼저 기분 좋은 피드백을 받고, 점점 날카로운 피드백을 받는 구조."
+  "feedbackOrderReason": "Warm feedback first → neutral → challenging. The writer receives encouraging feedback first, then increasingly sharp perspectives."
 }

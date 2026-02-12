@@ -6,13 +6,13 @@ import type { Comment } from "./commentsData.js";
 
 // --- System prompt builders ---
 
-const SITUATION_INITIAL = `당신은 블로그 글을 읽고 첫 댓글을 남기는 독자입니다.
-글을 읽고 느낀 점, 공감한 부분, 또는 궁금한 점을 1~3문장으로 댓글을 남겨주세요.
-댓글 텍스트만 출력하세요. 다른 설명이나 메타 텍스트 없이 댓글 내용만 작성하세요.`;
+const SITUATION_INITIAL = `You are a reader leaving the first comment on a blog post.
+Share your thoughts, what resonated with you, or what you're curious about in 1-3 sentences.
+Output only the comment text. Write only the comment content without any explanations or meta text.`;
 
-const SITUATION_REPLY = `당신은 블로그 글에 이미 달린 댓글에 답하는 독자입니다.
-이전 댓글의 맥락을 고려하여 자연스럽게 1~3문장으로 대댓글을 남겨주세요.
-댓글 텍스트만 출력하세요. 다른 설명이나 메타 텍스트 없이 댓글 내용만 작성하세요.`;
+const SITUATION_REPLY = `You are a reader replying to an existing comment on a blog post.
+Considering the context of the previous comments, naturally leave a reply in 1-3 sentences.
+Output only the comment text. Write only the comment content without any explanations or meta text.`;
 
 export function buildSystemPrompt(situation: "initial" | "reply", promptContent: string): string {
   const situationText = situation === "initial" ? SITUATION_INITIAL : SITUATION_REPLY;
@@ -22,7 +22,7 @@ export function buildSystemPrompt(situation: "initial" | "reply", promptContent:
 export function buildUserMessage(post: { title: string; content: string }, threadContext?: string): string {
   let msg = `# ${post.title}\n\n${post.content}`;
   if (threadContext) {
-    msg += `\n\n---\n\n## 댓글 맥락\n\n${threadContext}`;
+    msg += `\n\n---\n\n## Comment Context\n\n${threadContext}`;
   }
   return msg;
 }

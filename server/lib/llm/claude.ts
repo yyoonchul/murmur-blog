@@ -1,71 +1,78 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getApiKey, readSettings } from "../settings.js";
+import type { LLMProvider, LLMOptions, LLMMessage, LLMModelInfo } from "./types.js";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
-function getClient(): Anthropic {
-  const apiKey = getApiKey("ANTHROPIC_API_KEY");
-  if (!apiKey) {
-    throw new Error(
-      "ANTHROPIC_API_KEY not configured. Set it in Settings or .env file."
+const CLAUDE_MODELS: LLMModelInfo[] = [
+  {
+    id: "claude-opus-4-5-20251101",
+    name: "Claude Opus 4.5",
+    description: "Most intelligent model",
+    inputPrice: "$15/MTok",
+    outputPrice: "$75/MTok",
+    latency: "Moderate",
+  },
+  {
+    id: "claude-sonnet-4-5-20250929",
+    name: "Claude Sonnet 4.5",
+    description: "Speed + intelligence",
+    inputPrice: "$3/MTok",
+    outputPrice: "$15/MTok",
+    latency: "Fast",
+  },
+  {
+    id: "claude-haiku-4-5-20251001",
+    name: "Claude Haiku 4.5",
+    description: "Fastest model",
+    inputPrice: "$1/MTok",
+    outputPrice: "$5/MTok",
+    latency: "Fastest",
+  },
+];
+
+export class ClaudeProvider implements LLMProvider {
+  name = "anthropic";
+
+  private getClient(): Anthropic {
+    const apiKey = getApiKey("ANTHROPIC_API_KEY");
+    if (!apiKey) {
+      throw new Error(
+        "ANTHROPIC_API_KEY not configured. Set it in Settings or .env file."
+      );
+    }
+    return new Anthropic({ apiKey });
+  }
+
+  getDefaultModel(): string {
+    return DEFAULT_MODEL;
+  }
+
+  getAvailableModels(): LLMModelInfo[] {
+    const settings = readSettings();
+    const customModels: LLMModelInfo[] = (settings.CUSTOM_MODELS?.anthropic || []).map(
+      (m: { id: string; name: string; description?: string }) => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        isCustom: true,
+      })
     );
-  }
-  return new Anthropic({ apiKey });
-}
-
-function getModel(): string {
-  const settings = readSettings();
-  return settings.MODEL || DEFAULT_MODEL;
-}
-
-export interface ClaudeOptions {
-  /** System prompt (persona) */
-  system?: string;
-  /** Model to use (defaults to MODEL in settings.json) */
-  model?: string;
-  /** Max tokens for response (defaults to 4096) */
-  maxTokens?: number;
-}
-
-/**
- * Send a message to Claude and get a text response.
- *
- * @param userMessage - The user's input text
- * @param options - Optional configuration (system prompt, model, maxTokens)
- * @returns The assistant's text response
- *
- * @example
- * ```ts
- * import { sendMessage } from "./lib/llm/claude.js";
- *
- * const response = await sendMessage("Hello!", {
- *   system: "You are a helpful assistant.",
- * });
- * console.log(response);
- * ```
- */
-export async function sendMessage(
-  userMessage: string,
-  options: ClaudeOptions = {}
-): Promise<string> {
-  const {
-    system,
-    model = getModel(),
-    maxTokens = 4096,
-  } = options;
-
-  console.log(`[LLM] sendMessage called. model: ${model}, maxTokens: ${maxTokens}, system length: ${system?.length ?? 0}, userMessage length: ${userMessage.length}`);
-
-  let client: Anthropic;
-  try {
-    client = getClient();
-    console.log(`[LLM] Anthropic client created successfully`);
-  } catch (err) {
-    console.error(`[LLM] FAILED to create Anthropic client:`, err);
-    throw err;
+    return [...CLAUDE_MODELS, ...customModels];
   }
 
-  try {
+  async sendMessage(
+    userMessage: string,
+    options: LLMOptions = {}
+  ): Promise<string> {
+    const { system, model = DEFAULT_MODEL, maxTokens = 4096 } = options;
+
+    console.log(
+      `[Claude] sendMessage: model=${model}, maxTokens=${maxTokens}, system=${system?.length ?? 0}chars`
+    );
+
+    const client = this.getClient();
+
     const message = await client.messages.create({
       model,
       max_tokens: maxTokens,
@@ -73,57 +80,26 @@ export async function sendMessage(
       messages: [{ role: "user", content: userMessage }],
     });
 
-    console.log(`[LLM] API response received. stop_reason: ${message.stop_reason}, content blocks: ${message.content.length}`);
-
-    // Extract text from the response
     const textBlock = message.content.find((block) => block.type === "text");
-    const result = textBlock ? textBlock.text : "";
-    console.log(`[LLM] Extracted text length: ${result.length}`);
-    return result;
-  } catch (err) {
-    console.error(`[LLM] API call FAILED:`, err);
-    throw err;
+    return textBlock ? textBlock.text : "";
   }
-}
 
-/**
- * Send a conversation (multiple turns) to Claude and get a text response.
- *
- * @param messages - Array of conversation messages
- * @param options - Optional configuration (system prompt, model, maxTokens)
- * @returns The assistant's text response
- *
- * @example
- * ```ts
- * import { sendConversation } from "./lib/llm/claude.js";
- *
- * const response = await sendConversation([
- *   { role: "user", content: "Hello!" },
- *   { role: "assistant", content: "Hi there!" },
- *   { role: "user", content: "How are you?" },
- * ], {
- *   system: "You are a friendly assistant.",
- * });
- * ```
- */
-export async function sendConversation(
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  options: ClaudeOptions = {}
-): Promise<string> {
-  const {
-    system,
-    model = getModel(),
-    maxTokens = 4096,
-  } = options;
+  async sendConversation(
+    messages: LLMMessage[],
+    options: LLMOptions = {}
+  ): Promise<string> {
+    const { system, model = DEFAULT_MODEL, maxTokens = 4096 } = options;
 
-  const client = getClient();
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    ...(system && { system }),
-    messages,
-  });
+    const client = this.getClient();
 
-  const textBlock = response.content.find((block) => block.type === "text");
-  return textBlock ? textBlock.text : "";
+    const response = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      ...(system && { system }),
+      messages,
+    });
+
+    const textBlock = response.content.find((block) => block.type === "text");
+    return textBlock ? textBlock.text : "";
+  }
 }

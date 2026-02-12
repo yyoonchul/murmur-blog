@@ -207,15 +207,42 @@ export default function PostView() {
     }
   };
 
-  // Build comment tree: attach replies to parent comments
+  // Build comment tree: recursively attach replies to parent comments (supports infinite nesting)
   const buildCommentTree = (flatComments: Comment[]): Comment[] => {
-    const topLevel = flatComments.filter((c) => !c.parentId);
-    const replies = flatComments.filter((c) => c.parentId);
+    // Create a map of id -> comment with empty replies array
+    const commentMap = new Map<string, Comment>();
+    flatComments.forEach((c) => {
+      commentMap.set(c.id, { ...c, replies: [] });
+    });
 
-    return topLevel.map((comment) => ({
-      ...comment,
-      replies: replies.filter((r) => r.parentId === comment.id),
-    }));
+    // Build tree by attaching each comment to its parent's replies
+    const rootComments: Comment[] = [];
+
+    commentMap.forEach((comment) => {
+      if (comment.parentId) {
+        const parent = commentMap.get(comment.parentId);
+        if (parent && parent.replies) {
+          parent.replies.push(comment);
+        } else {
+          // Orphan comment (parent not found) - treat as root
+          rootComments.push(comment);
+        }
+      } else {
+        rootComments.push(comment);
+      }
+    });
+
+    // Sort replies by createdAt at each level
+    const sortReplies = (comments: Comment[]): Comment[] => {
+      return comments
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .map((c) => ({
+          ...c,
+          replies: c.replies ? sortReplies(c.replies) : [],
+        }));
+    };
+
+    return sortReplies(rootComments);
   };
 
   // Configure marked for safe HTML rendering
@@ -290,11 +317,13 @@ export default function PostView() {
             <CommentCard
               key={comment.id}
               comment={comment}
+              depth={0}
+              maxDepth={8}
               onReply={handleReplySubmit}
               replyingTo={replyingTo}
               onStartReply={setReplyingTo}
               onCancelReply={() => setReplyingTo(null)}
-              isGeneratingReply={generatingReplyFor === comment.id}
+              generatingReplyFor={generatingReplyFor}
             />
           ))}
 

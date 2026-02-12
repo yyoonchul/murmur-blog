@@ -23,7 +23,7 @@ export default function Editor() {
           setTitle(post.title);
           setContent(post.content);
         })
-        .catch(() => setError("글을 불러올 수 없습니다."))
+        .catch(() => setError("Failed to load post."))
         .finally(() => setLoading(false));
     } else {
       titleRef.current?.focus();
@@ -42,7 +42,7 @@ export default function Editor() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
-      setError("제목과 내용을 입력해주세요.");
+      setError("Please enter a title and content.");
       return;
     }
 
@@ -58,7 +58,7 @@ export default function Editor() {
         navigate(`/post/${post.id}`, { state: { justCreated: true } });
       }
     } catch {
-      setError("저장에 실패했습니다.");
+      setError("Failed to save.");
       setSaving(false);
     }
   };
@@ -66,7 +66,7 @@ export default function Editor() {
   if (loading) {
     return (
       <div className="animate-fade-in">
-        <p className="text-muted text-sm">불러오는 중...</p>
+        <p className="text-muted text-sm">Loading...</p>
       </div>
     );
   }
@@ -79,7 +79,7 @@ export default function Editor() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="제목"
+          placeholder="Title"
           className="w-full font-display text-3xl font-semibold bg-transparent border-none outline-none placeholder:text-muted"
         />
 
@@ -87,14 +87,14 @@ export default function Editor() {
           ref={textareaRef}
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="마크다운으로 작성하세요..."
+          placeholder="Write in markdown..."
           className="w-full min-h-[400px] bg-transparent border-none outline-none resize-none text-primary leading-relaxed placeholder:text-muted font-mono text-sm"
         />
 
         <div className="flex items-center justify-between pt-4 border-t border-border-light">
           <div className="flex items-center gap-4">
             <span className="text-muted text-xs">
-              {content.length.toLocaleString()}자
+              {content.length.toLocaleString()} characters
             </span>
             {error && <span className="text-accent text-sm">{error}</span>}
           </div>
@@ -105,14 +105,14 @@ export default function Editor() {
               onClick={() => navigate(-1)}
               className="text-secondary text-sm hover:text-primary transition-colors"
             >
-              취소
+              Cancel
             </button>
             <button
               type="submit"
               disabled={saving || !title.trim() || !content.trim()}
               className="btn-primary text-sm"
             >
-              {saving ? "저장 중..." : isEdit ? "수정 완료 →" : "발행 →"}
+              {saving ? "Saving..." : isEdit ? "Update →" : "Publish →"}
             </button>
           </div>
         </div>

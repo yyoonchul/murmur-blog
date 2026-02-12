@@ -2,10 +2,14 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import { exec } from "child_process";
+import { platform } from "os";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
-import { getApiKey, readSettings, writeSettings } from "./lib/settings.js";
-import { readPersonas, writePersonas } from "./lib/personas.js";
+import { readSettings, writeSettings } from "./lib/settings.js";
+import { readPersonas, writePersonas, readLibraryWithStatus, addPersonaFromLibrary, removePersona } from "./lib/personas.js";
+import { getProvider, getProviderTypes } from "./lib/llm/index.js";
+import type { ProviderType } from "./lib/llm/types.js";
 import postsRouter from "./routes/posts.js";
 
 dotenv.config();
@@ -40,19 +44,19 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", message: "Monolog server is running" });
 });
 
-const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
-const DEFAULT_AVAILABLE_MODELS = [
-  { id: "claude-opus-4-6-20250415", name: "Claude Opus 4.6", description: "Our most intelligent model", inputPrice: "$5 / MTok", outputPrice: "$25 / MTok" },
-  { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", description: "Best speed and intelligence", inputPrice: "$3 / MTok", outputPrice: "$15 / MTok" },
-  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", description: "Fastest model", inputPrice: "$1 / MTok", outputPrice: "$5 / MTok" },
-];
+const RESERVED_SETTINGS_KEYS = ["MODEL", "AVAILABLE_MODELS", "PROVIDER", "CUSTOM_MODELS"];
 
 app.get("/api/settings", onlyLocalhost, (_req, res) => {
   const settings = readSettings();
-  const availableModels = settings.AVAILABLE_MODELS || DEFAULT_AVAILABLE_MODELS;
-  const reservedKeys = ["MODEL", "AVAILABLE_MODELS"];
+  const currentProvider = (settings.PROVIDER || "anthropic") as ProviderType;
+  const provider = getProvider(currentProvider);
+
+  // Get models from the current provider
+  const availableModels = provider.getAvailableModels();
+
+  // Build API keys list (exclude reserved keys)
   const apiKeys = Object.entries(settings)
-    .filter(([key, value]) => !reservedKeys.includes(key) && typeof value === "string")
+    .filter(([key, value]) => !RESERVED_SETTINGS_KEYS.includes(key) && typeof value === "string")
     .map(([name, value]) => ({
       name,
       masked: typeof value === "string" && value.length > 11
@@ -61,16 +65,26 @@ app.get("/api/settings", onlyLocalhost, (_req, res) => {
     }));
 
   res.json({
+    provider: currentProvider,
+    providers: getProviderTypes(),
     apiKeys,
-    model: settings.MODEL || DEFAULT_MODEL,
+    model: settings.MODEL || provider.getDefaultModel(),
     availableModels,
   });
 });
 
 app.put("/api/settings", onlyLocalhost, (req, res) => {
-  const { apiKey, apiKeyName, model, deleteApiKey, renameFrom } = req.body ?? {};
+  const { apiKey, apiKeyName, model, deleteApiKey, renameFrom, provider: newProvider } = req.body ?? {};
   const settings = readSettings();
   const keyName = apiKeyName || "ANTHROPIC_API_KEY";
+
+  // Handle provider change
+  if (newProvider && getProviderTypes().includes(newProvider)) {
+    settings.PROVIDER = newProvider;
+    // Reset model to the new provider's default
+    const providerInstance = getProvider(newProvider as ProviderType);
+    settings.MODEL = providerInstance.getDefaultModel();
+  }
 
   if (deleteApiKey === true) {
     delete settings[keyName];
@@ -90,12 +104,14 @@ app.put("/api/settings", onlyLocalhost, (req, res) => {
   }
   writeSettings(settings);
 
-  // Build apiKeys array from all keys that look like API keys (exclude MODEL, AVAILABLE_MODELS)
+  // Build response
   const updated = readSettings();
-  const availableModels = updated.AVAILABLE_MODELS || DEFAULT_AVAILABLE_MODELS;
-  const reservedKeys = ["MODEL", "AVAILABLE_MODELS"];
+  const currentProvider = (updated.PROVIDER || "anthropic") as ProviderType;
+  const providerInstance = getProvider(currentProvider);
+  const availableModels = providerInstance.getAvailableModels();
+
   const apiKeys = Object.entries(updated)
-    .filter(([key, value]) => !reservedKeys.includes(key) && typeof value === "string")
+    .filter(([key, value]) => !RESERVED_SETTINGS_KEYS.includes(key) && typeof value === "string")
     .map(([name, value]) => ({
       name,
       masked: typeof value === "string" && value.length > 11
@@ -104,9 +120,93 @@ app.put("/api/settings", onlyLocalhost, (req, res) => {
     }));
 
   res.json({
+    provider: currentProvider,
+    providers: getProviderTypes(),
     apiKeys,
-    model: updated.MODEL || DEFAULT_MODEL,
+    model: updated.MODEL || providerInstance.getDefaultModel(),
     availableModels,
+  });
+});
+
+// Custom model endpoints
+app.post("/api/settings/custom-models", onlyLocalhost, (req, res) => {
+  const { provider, modelId, modelName, description } = req.body ?? {};
+  if (!provider || !modelId || !modelName) {
+    res.status(400).json({ error: "provider, modelId, and modelName are required" });
+    return;
+  }
+  if (!getProviderTypes().includes(provider)) {
+    res.status(400).json({ error: "Invalid provider" });
+    return;
+  }
+
+  const settings = readSettings();
+  if (!settings.CUSTOM_MODELS) {
+    settings.CUSTOM_MODELS = { anthropic: [], openai: [], google: [] };
+  }
+  if (!settings.CUSTOM_MODELS[provider]) {
+    settings.CUSTOM_MODELS[provider] = [];
+  }
+
+  // Check for duplicate
+  const existing = settings.CUSTOM_MODELS[provider].find((m: { id: string }) => m.id === modelId);
+  if (existing) {
+    res.status(400).json({ error: "Model ID already exists" });
+    return;
+  }
+
+  const newModel: { id: string; name: string; description?: string } = { id: modelId, name: modelName };
+  if (description?.trim()) {
+    newModel.description = description.trim();
+  }
+  settings.CUSTOM_MODELS[provider].push(newModel);
+  writeSettings(settings);
+
+  // Return updated settings
+  const updated = readSettings();
+  const currentProvider = (updated.PROVIDER || "anthropic") as ProviderType;
+  const providerInstance = getProvider(currentProvider);
+  const availableModels = providerInstance.getAvailableModels();
+
+  res.json({
+    provider: currentProvider,
+    availableModels,
+    customModels: updated.CUSTOM_MODELS,
+  });
+});
+
+app.delete("/api/settings/custom-models/:provider/:modelId", onlyLocalhost, (req, res) => {
+  const { provider, modelId } = req.params;
+  if (!getProviderTypes().includes(provider as ProviderType)) {
+    res.status(400).json({ error: "Invalid provider" });
+    return;
+  }
+
+  const settings = readSettings();
+  if (!settings.CUSTOM_MODELS || !settings.CUSTOM_MODELS[provider]) {
+    res.status(404).json({ error: "Model not found" });
+    return;
+  }
+
+  const index = settings.CUSTOM_MODELS[provider].findIndex((m: { id: string }) => m.id === modelId);
+  if (index === -1) {
+    res.status(404).json({ error: "Model not found" });
+    return;
+  }
+
+  settings.CUSTOM_MODELS[provider].splice(index, 1);
+  writeSettings(settings);
+
+  // Return updated settings
+  const updated = readSettings();
+  const currentProvider = (updated.PROVIDER || "anthropic") as ProviderType;
+  const providerInstance = getProvider(currentProvider);
+  const availableModels = providerInstance.getAvailableModels();
+
+  res.json({
+    provider: currentProvider,
+    availableModels,
+    customModels: updated.CUSTOM_MODELS,
   });
 });
 
@@ -124,6 +224,55 @@ app.put("/api/personas", onlyLocalhost, (req, res) => {
   writePersonas({ personas, feedbackOrder, feedbackOrderReason });
   const saved = readPersonas();
   res.json(saved);
+});
+
+app.get("/api/personas/library", onlyLocalhost, (_req, res) => {
+  const library = readLibraryWithStatus();
+  res.json(library);
+});
+
+app.post("/api/personas/add", onlyLocalhost, (req, res) => {
+  const { personaId } = req.body ?? {};
+  if (!personaId) {
+    res.status(400).json({ error: "personaId required" });
+    return;
+  }
+  const result = addPersonaFromLibrary(personaId);
+  if (!result) {
+    res.status(400).json({ error: "Persona not found or already active" });
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/personas/:id", onlyLocalhost, (req, res) => {
+  const result = removePersona(req.params.id);
+  if (!result) {
+    res.status(404).json({ error: "Persona not found" });
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/open-data-folder", onlyLocalhost, (_req, res) => {
+  const dataPath = path.join(__dirname, "data");
+  const plat = platform();
+
+  const command =
+    plat === "darwin"
+      ? `open "${dataPath}"`
+      : plat === "win32"
+        ? `explorer "${dataPath}"`
+        : `xdg-open "${dataPath}"`;
+
+  exec(command, (error) => {
+    if (error) {
+      console.error("Failed to open data folder:", error);
+      res.status(500).json({ error: "Failed to open folder" });
+      return;
+    }
+    res.json({ success: true });
+  });
 });
 
 async function start() {

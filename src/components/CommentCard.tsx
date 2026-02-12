@@ -5,23 +5,29 @@ import AiTypingIndicator from "./AiTypingIndicator";
 
 interface CommentCardProps {
   comment: Comment;
+  depth?: number;
+  maxDepth?: number;
   onReply?: (parentId: string, content: string) => void;
   replyingTo?: string | null;
   onStartReply?: (commentId: string) => void;
   onCancelReply?: () => void;
-  isGeneratingReply?: boolean;
+  generatingReplyFor?: string | null;
 }
 
 export default function CommentCard({
   comment,
+  depth = 0,
+  maxDepth = 8,
   onReply,
   replyingTo,
   onStartReply,
   onCancelReply,
-  isGeneratingReply,
+  generatingReplyFor,
 }: CommentCardProps) {
   const isAI = comment.isAI ?? true;
   const isReplying = replyingTo === comment.id;
+  const canReply = depth < maxDepth;
+  const isGeneratingReply = generatingReplyFor === comment.id;
 
   const handleReplySubmit = (content: string) => {
     if (onReply) {
@@ -58,7 +64,7 @@ export default function CommentCard({
       />
 
       {/* Reply button */}
-      {onStartReply && !isReplying && (
+      {canReply && onStartReply && !isReplying && (
         <button
           onClick={() => onStartReply(comment.id)}
           className="mt-3 text-sm text-secondary hover:text-accent transition-colors"
@@ -84,46 +90,50 @@ export default function CommentCard({
         </div>
       )}
 
-      {/* Nested replies */}
+      {/* Nested replies - recursive rendering */}
       {comment.replies && comment.replies.length > 0 && (
-        <div className="mt-4 space-y-3">
-          {comment.replies.map((reply) => {
-            const replyHtml = marked.parse(reply.content) as string;
-            return (
-              <div
-                key={reply.id}
-                className="ml-6 pl-4 border-l-2"
-                style={
-                  reply.isAI && reply.personaBorderColor
-                    ? { borderLeftColor: reply.personaBorderColor }
-                    : reply.isAI
-                    ? { borderLeftColor: "var(--color-border-dark, #d1d5db)" }
-                    : { borderLeftColor: "#fde68a" }
-                }
-              >
-                <p className="text-sm text-secondary mb-1">
-                  {reply.isAI && reply.personaEmoji && (
-                    <span className="mr-1">{reply.personaEmoji}</span>
-                  )}
-                  {reply.isAI && reply.personaColor ? (
-                    <span style={{ color: reply.personaColor }}>{reply.persona}</span>
-                  ) : (
-                    reply.persona
-                  )}
-                </p>
-                <div
-                  className="comment-markdown text-primary text-sm leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: replyHtml }}
-                />
-              </div>
-            );
-          })}
+        <div className="nested-replies mt-4 space-y-3">
+          {comment.replies.map((reply) => (
+            <div
+              key={reply.id}
+              className="comment-thread"
+              style={{
+                marginLeft: depth < 6 ? "16px" : "8px",
+                paddingLeft: "12px",
+                borderLeftWidth: "2px",
+                borderLeftStyle: "solid",
+                borderLeftColor: reply.isAI
+                  ? reply.personaBorderColor || "var(--color-border-dark, #d1d5db)"
+                  : "#fde68a",
+              }}
+            >
+              <CommentCard
+                comment={reply}
+                depth={depth + 1}
+                maxDepth={maxDepth}
+                onReply={onReply}
+                replyingTo={replyingTo}
+                onStartReply={onStartReply}
+                onCancelReply={onCancelReply}
+                generatingReplyFor={generatingReplyFor}
+              />
+            </div>
+          ))}
         </div>
       )}
 
       {/* AI generating reply indicator */}
       {isGeneratingReply && (
-        <div className="mt-4 ml-6 pl-4 border-l-2" style={{ borderLeftColor: "var(--color-border-dark, #d1d5db)" }}>
+        <div
+          className="mt-4 comment-thread"
+          style={{
+            marginLeft: depth < 6 ? "16px" : "8px",
+            paddingLeft: "12px",
+            borderLeftWidth: "2px",
+            borderLeftStyle: "solid",
+            borderLeftColor: "var(--color-border-dark, #d1d5db)",
+          }}
+        >
           <AiTypingIndicator compact />
         </div>
       )}

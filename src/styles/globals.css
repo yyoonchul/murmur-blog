@@ -293,6 +293,19 @@ body {
 }
 .comment-markdown a { color: var(--accent); text-decoration: underline; }
 
+/* Nested Comment Thread (Reddit-like) */
+.comment-thread {
+  position: relative;
+}
+
+.comment-thread:hover > .comment-card {
+  border-color: var(--border-dark);
+}
+
+.nested-replies {
+  margin-top: 12px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   :root {

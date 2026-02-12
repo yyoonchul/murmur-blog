@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 // SVG icons that can be colored
 function PersonaIcon({ emoji, color, size = 28 }: { emoji: string; color: string; size?: number }) {
@@ -54,6 +54,7 @@ type ModelOption = {
   contextWindow?: string;
   maxOutput?: string;
   latency?: string;
+  isCustom?: boolean;
 };
 
 type ApiKeyEntry = {
@@ -61,7 +62,17 @@ type ApiKeyEntry = {
   masked: string;
 };
 
+type ProviderType = "anthropic" | "openai" | "google";
+
+const PROVIDER_INFO: Record<ProviderType, { name: string; keyName: string }> = {
+  anthropic: { name: "Anthropic (Claude)", keyName: "ANTHROPIC_API_KEY" },
+  openai: { name: "OpenAI (GPT)", keyName: "OPENAI_API_KEY" },
+  google: { name: "Google (Gemini)", keyName: "GOOGLE_API_KEY" },
+};
+
 type SettingsState = {
+  provider: ProviderType;
+  providers: ProviderType[];
   apiKeys: ApiKeyEntry[];
   model: string;
   availableModels: ModelOption[];
@@ -85,21 +96,41 @@ interface PersonasData {
   feedbackOrderReason: string;
 }
 
+interface LibraryPersona {
+  id: string;
+  name: string;
+  role: string;
+  emoji: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  promptFile: string;
+  description: string;
+  isActive: boolean;
+  promptContent: string;
+}
+
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [state, setState] = useState<SettingsState>({
+    provider: "anthropic",
+    providers: ["anthropic", "openai", "google"],
     apiKeys: [],
     model: "",
     availableModels: [],
   });
+  const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const [apiKeyName, setApiKeyName] = useState("ANTHROPIC_API_KEY");
-  const [selectedModel, setSelectedModel] = useState("");
+  const [apiKeyName, setApiKeyName] = useState("API_KEY");
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [editingApiKey, setEditingApiKey] = useState<string | null>(null); // null or key name being edited
   const [addingApiKey, setAddingApiKey] = useState(false);
   const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [addingCustomModel, setAddingCustomModel] = useState(false);
+  const [customModelId, setCustomModelId] = useState("");
+  const [customModelName, setCustomModelName] = useState("");
+  const [customModelDesc, setCustomModelDesc] = useState("");
 
   // Personas state
   const [personasLoading, setPersonasLoading] = useState(true);
@@ -111,7 +142,13 @@ export default function Settings() {
   });
   const [personasMessage, setPersonasMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [modalPersonaIndex, setModalPersonaIndex] = useState<number | null>(null);
-  const carouselRef = useRef<HTMLDivElement>(null);
+
+  // Library state
+  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+  const [libraryPersonas, setLibraryPersonas] = useState<LibraryPersona[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [editingLibraryPersona, setEditingLibraryPersona] = useState<LibraryPersona | null>(null);
+  const [editingLibraryData, setEditingLibraryData] = useState<LibraryPersona | null>(null); // Local edits
 
   useEffect(() => {
     fetch("/api/settings")
@@ -121,12 +158,13 @@ export default function Settings() {
           throw new Error(data?.error || `Failed to load settings (${res.status})`);
         }
         setState({
+          provider: data.provider ?? "anthropic",
+          providers: data.providers ?? ["anthropic", "openai", "google"],
           apiKeys: data.apiKeys ?? [],
           model: data.model ?? "",
           availableModels: data.availableModels ?? [],
         });
-        setSelectedModel(data.model ?? "");
-      })
+              })
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to load settings" }))
       .finally(() => setLoading(false));
 
@@ -154,14 +192,24 @@ export default function Settings() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || `Failed to save (${res.status})`);
         setState({
+          provider: data.provider ?? "anthropic",
+          providers: data.providers ?? ["anthropic", "openai", "google"],
           apiKeys: data.apiKeys ?? [],
           model: data.model ?? "",
           availableModels: data.availableModels ?? [],
         });
-        setSelectedModel(data.model ?? "");
-        return data;
+                return data;
       })
       .finally(() => setSaving(false));
+  };
+
+  const handleSelectProvider = (newProvider: ProviderType) => {
+    updateSettings({ provider: newProvider })
+      .then(() => {
+        setProviderModalOpen(false);
+        setMessage({ type: "ok", text: `Switched to ${PROVIDER_INFO[newProvider].name}` });
+      })
+      .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to switch provider" }));
   };
 
   const handleSaveApiKey = (e: React.FormEvent) => {
@@ -179,7 +227,7 @@ export default function Settings() {
     updateSettings(payload)
       .then(() => {
         setApiKey("");
-        setApiKeyName("ANTHROPIC_API_KEY");
+        setApiKeyName("API_KEY");
         setEditingApiKey(null);
         setAddingApiKey(false);
         setMessage({ type: "ok", text: "API key saved." });
@@ -188,7 +236,7 @@ export default function Settings() {
   };
 
   const handleDeleteApiKey = (keyName: string) => {
-    if (!confirm(`${keyName}를 삭제하시겠습니까?`)) return;
+    if (!confirm(`Are you sure you want to delete ${keyName}?`)) return;
     updateSettings({ deleteApiKey: true, apiKeyName: keyName })
       .then(() => setMessage({ type: "ok", text: "API key deleted." }))
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to delete" }));
@@ -201,6 +249,52 @@ export default function Settings() {
         setMessage({ type: "ok", text: "Model updated." });
       })
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to save" }));
+  };
+
+  const handleAddCustomModel = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customModelId.trim() || !customModelName.trim()) return;
+    setSaving(true);
+    setMessage(null);
+    fetch("/api/settings/custom-models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: state.provider,
+        modelId: customModelId.trim(),
+        modelName: customModelName.trim(),
+        description: customModelDesc.trim() || undefined,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Failed to add model");
+        setState((prev) => ({ ...prev, availableModels: data.availableModels ?? prev.availableModels }));
+        setCustomModelId("");
+        setCustomModelName("");
+        setCustomModelDesc("");
+        setAddingCustomModel(false);
+        setMessage({ type: "ok", text: "Model added." });
+      })
+      .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to add" }))
+      .finally(() => setSaving(false));
+  };
+
+  const handleDeleteCustomModel = (modelId: string) => {
+    if (!confirm(`Delete "${modelId}"?`)) return;
+    setSaving(true);
+    setMessage(null);
+    fetch(`/api/settings/custom-models/${state.provider}/${encodeURIComponent(modelId)}`, {
+      method: "DELETE",
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Failed to delete");
+        setState((prev) => ({ ...prev, availableModels: data.availableModels ?? prev.availableModels }));
+        setMessage({ type: "ok", text: "Model deleted." });
+      })
+      .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to delete" }))
+      .finally(() => setSaving(false));
   };
 
   const handlePersonasSave = (): Promise<boolean> => {
@@ -234,23 +328,64 @@ export default function Settings() {
     }));
   };
 
-  const scrollCarousel = (dir: "prev" | "next") => {
-    const el = carouselRef.current;
-    if (!el) return;
-    const cardWidth = 160;
-    el.scrollBy({ left: dir === "prev" ? -cardWidth : cardWidth, behavior: "smooth" });
+  const loadLibrary = () => {
+    setLibraryLoading(true);
+    fetch("/api/personas/library")
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Failed to load library");
+        setLibraryPersonas(data.presets || []);
+      })
+      .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to load library" }))
+      .finally(() => setLibraryLoading(false));
+  };
+
+  const handleAddPersona = (personaId: string) => {
+    setPersonasSaving(true);
+    fetch("/api/personas/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ personaId }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Failed to add persona");
+        setPersonasData(data);
+        setPersonasMessage({ type: "ok", text: "Persona added!" });
+        loadLibrary(); // Refresh library to update isActive
+      })
+      .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to add persona" }))
+      .finally(() => setPersonasSaving(false));
+  };
+
+  const handleRemovePersona = (personaId: string) => {
+    if (!confirm("Remove this persona from your active set?")) return;
+    setPersonasSaving(true);
+    fetch(`/api/personas/${personaId}`, { method: "DELETE" })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Failed to remove persona");
+        setPersonasData(data);
+        setPersonasMessage({ type: "ok", text: "Persona removed." });
+        loadLibrary(); // Refresh library to update isActive
+      })
+      .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to remove persona" }))
+      .finally(() => setPersonasSaving(false));
   };
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (modalPersonaIndex !== null) setModalPersonaIndex(null);
-        if (modelModalOpen) setModelModalOpen(false);
+        if (editingLibraryPersona) setEditingLibraryPersona(null);
+        else if (modalPersonaIndex !== null) setModalPersonaIndex(null);
+        else if (libraryModalOpen) setLibraryModalOpen(false);
+        else if (modelModalOpen) setModelModalOpen(false);
+        else if (providerModalOpen) setProviderModalOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [modalPersonaIndex, modelModalOpen]);
+  }, [modalPersonaIndex, modelModalOpen, providerModalOpen, libraryModalOpen, editingLibraryPersona]);
 
   if (loading) {
     return (
@@ -284,7 +419,7 @@ export default function Settings() {
                         className="input-minimal w-full font-mono text-sm"
                         value={apiKeyName}
                         onChange={(e) => setApiKeyName(e.target.value)}
-                        placeholder="ANTHROPIC_API_KEY"
+                        placeholder="API_KEY"
                       />
                     </label>
                     <label className="block">
@@ -308,7 +443,7 @@ export default function Settings() {
                     <button
                       type="button"
                       className="btn-secondary text-sm"
-                      onClick={() => { setEditingApiKey(null); setApiKey(""); setApiKeyName("ANTHROPIC_API_KEY"); }}
+                      onClick={() => { setEditingApiKey(null); setApiKey(""); setApiKeyName("API_KEY"); }}
                     >
                       Cancel
                     </button>
@@ -349,7 +484,7 @@ export default function Settings() {
                     className="input-minimal w-full font-mono text-sm"
                     value={apiKeyName}
                     onChange={(e) => setApiKeyName(e.target.value)}
-                    placeholder="ANTHROPIC_API_KEY"
+                    placeholder="API_KEY"
                   />
                 </label>
                 <label className="block">
@@ -372,7 +507,7 @@ export default function Settings() {
                 <button
                   type="button"
                   className="btn-secondary text-sm"
-                  onClick={() => { setAddingApiKey(false); setApiKey(""); setApiKeyName("ANTHROPIC_API_KEY"); }}
+                  onClick={() => { setAddingApiKey(false); setApiKey(""); setApiKeyName("API_KEY"); }}
                 >
                   Cancel
                 </button>
@@ -390,11 +525,76 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* Provider Section */}
+      <section className="mb-8">
+        <h2 className="font-display text-lg font-semibold mb-4">AI Provider</h2>
+        <p className="text-sm text-secondary mb-4">
+          Choose your LLM provider. Make sure you have the corresponding API key configured.
+        </p>
+        <div className="relative">
+          <button
+            type="button"
+            className="w-full flex items-center justify-between gap-2 p-3 rounded-lg border border-border-light bg-surface hover:border-border-dark transition-colors text-left"
+            onClick={() => setProviderModalOpen(!providerModalOpen)}
+          >
+            <div>
+              <span className="font-medium text-sm block">
+                {PROVIDER_INFO[state.provider]?.name || state.provider}
+              </span>
+              <span className="text-xs text-muted">
+                Requires {PROVIDER_INFO[state.provider]?.keyName}
+              </span>
+            </div>
+            <span className={`text-secondary transition-transform ${providerModalOpen ? "rotate-180" : ""}`}>▼</span>
+          </button>
+
+          {/* Provider Dropdown */}
+          {providerModalOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setProviderModalOpen(false)}
+              />
+              <div
+                className="absolute top-full left-0 right-0 z-50 mt-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80"
+                style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
+              >
+                <div className="p-2">
+                  {state.providers.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all ${
+                        state.provider === p
+                          ? "bg-accent/15 border border-accent/30"
+                          : "hover:bg-white/50 border border-transparent"
+                      }`}
+                      onClick={() => handleSelectProvider(p)}
+                      disabled={saving}
+                    >
+                      <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        state.provider === p ? "border-accent" : "border-border-dark"
+                      }`}>
+                        {state.provider === p && <span className="w-2 h-2 rounded-full bg-accent" />}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-sm block">{PROVIDER_INFO[p]?.name}</span>
+                        <span className="text-xs text-muted">Requires {PROVIDER_INFO[p]?.keyName}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
       {/* Model Section */}
       <section className="mb-8">
         <h2 className="font-display text-lg font-semibold mb-4">Model</h2>
         <p className="text-sm text-secondary mb-4">
-          Stored in <code className="font-mono text-xs bg-border-light px-1.5 py-0.5 rounded">server/data/settings.json</code>.
+          Available models for {PROVIDER_INFO[state.provider]?.name || state.provider}.
         </p>
         <div className="relative">
           <button
@@ -426,42 +626,124 @@ export default function Settings() {
               >
                 <div className="p-2 max-h-[50vh] overflow-y-auto">
                   {state.availableModels.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={`w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all ${
-                        state.model === m.id
-                          ? "bg-accent/15 border border-accent/30"
-                          : "hover:bg-white/50 border border-transparent"
-                      }`}
-                      onClick={() => handleSelectModel(m.id)}
-                      disabled={saving}
-                    >
-                      <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        state.model === m.id ? "border-accent" : "border-border-dark"
-                      }`}>
-                        {state.model === m.id && <span className="w-2 h-2 rounded-full bg-accent" />}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium text-sm">{m.name}</span>
-                          {m.latency && (
-                            <span className="text-xs text-muted shrink-0">{m.latency}</span>
+                    <div key={m.id} className="flex items-start gap-2">
+                      <button
+                        type="button"
+                        className={`flex-1 flex items-start gap-3 p-3 rounded-xl text-left transition-all ${
+                          state.model === m.id
+                            ? "bg-accent/15 border border-accent/30"
+                            : "hover:bg-white/50 border border-transparent"
+                        }`}
+                        onClick={() => handleSelectModel(m.id)}
+                        disabled={saving}
+                      >
+                        <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                          state.model === m.id ? "border-accent" : "border-border-dark"
+                        }`}>
+                          {state.model === m.id && <span className="w-2 h-2 rounded-full bg-accent" />}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-sm">{m.name}</span>
+                            {m.latency && (
+                              <span className="text-xs text-muted shrink-0">{m.latency}</span>
+                            )}
+                          </div>
+                          {m.description && (
+                            <p className="text-xs text-secondary mt-0.5">{m.description}</p>
+                          )}
+                          {(m.inputPrice || m.outputPrice || m.contextWindow || m.maxOutput) && (
+                            <div className="flex gap-3 mt-1 text-xs text-muted">
+                              {m.inputPrice && m.outputPrice && (
+                                <span>{m.inputPrice} in / {m.outputPrice} out</span>
+                              )}
+                              {m.contextWindow && <span>Context: {m.contextWindow}</span>}
+                              {m.maxOutput && <span>Output: {m.maxOutput}</span>}
+                            </div>
                           )}
                         </div>
-                        {m.description && (
-                          <p className="text-xs text-secondary mt-0.5">{m.description}</p>
-                        )}
-                        <div className="flex gap-3 mt-1 text-xs text-muted">
-                          {m.inputPrice && m.outputPrice && (
-                            <span>{m.inputPrice} in / {m.outputPrice} out</span>
-                          )}
-                          {m.contextWindow && <span>Context: {m.contextWindow}</span>}
-                          {m.maxOutput && <span>Output: {m.maxOutput}</span>}
-                        </div>
-                      </div>
-                    </button>
+                      </button>
+                      {m.isCustom && (
+                        <button
+                          type="button"
+                          className="mt-3 text-xs text-red-500 hover:text-red-700 p-1"
+                          onClick={() => handleDeleteCustomModel(m.id)}
+                          disabled={saving}
+                          title="Delete model"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   ))}
+
+                  {/* Add New Model Version */}
+                  <div className="mt-2 pt-2 border-t border-white/30">
+                    {addingCustomModel ? (
+                      <form onSubmit={handleAddCustomModel} className="p-3 space-y-2">
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Model ID (exact API name)</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm font-mono"
+                            value={customModelId}
+                            onChange={(e) => setCustomModelId(e.target.value)}
+                            placeholder="e.g., gpt-5.3"
+                            autoFocus
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Display Name</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={customModelName}
+                            onChange={(e) => setCustomModelName(e.target.value)}
+                            placeholder="e.g., GPT-5.3"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Description (optional)</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={customModelDesc}
+                            onChange={(e) => setCustomModelDesc(e.target.value)}
+                            placeholder="e.g., $2.50/MTok in, $10/MTok out"
+                          />
+                        </label>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="submit"
+                            className="btn-primary text-xs"
+                            disabled={saving || !customModelId.trim() || !customModelName.trim()}
+                          >
+                            {saving ? "Adding..." : "Add"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs"
+                            onClick={() => {
+                              setAddingCustomModel(false);
+                              setCustomModelId("");
+                              setCustomModelName("");
+                              setCustomModelDesc("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="w-full p-3 text-sm text-secondary hover:text-primary text-left"
+                        onClick={() => setAddingCustomModel(true)}
+                      >
+                        + Add New Model Version
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </>
@@ -475,61 +757,51 @@ export default function Settings() {
         </p>
       )}
 
-      {/* Personas Section: Carousel + Modal */}
+      {/* Personas Section */}
       <section>
-        <h2 className="font-display text-xl font-semibold mb-4">Personas</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl font-semibold">Personas</h2>
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={() => {
+              loadLibrary();
+              setLibraryModalOpen(true);
+            }}
+          >
+            Edit Persona List
+          </button>
+        </div>
         <p className="text-sm text-secondary mb-6">
-          Click a card to edit. Data in <code className="font-mono text-xs bg-border-light px-1.5 py-0.5 rounded">server/data/persona/</code>.
+          Your active AI commenters. Click a card to view details and edit.
         </p>
 
         {personasLoading ? (
           <p className="text-muted text-sm">Loading personas...</p>
         ) : (
           <>
-            <div className="relative flex items-center gap-2">
-              <button
-                type="button"
-                className="shrink-0 w-10 h-10 rounded-full border border-border-light flex items-center justify-center text-secondary hover:text-primary hover:border-border-dark transition-colors"
-                onClick={() => scrollCarousel("prev")}
-                aria-label="Previous"
-              >
-                ←
-              </button>
-              <div
-                ref={carouselRef}
-                className="flex gap-4 overflow-x-auto scroll-smooth py-2 flex-1 [&::-webkit-scrollbar]:hidden"
-                style={{ scrollSnapType: "x mandatory", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
-              >
-                {personasData.personas.map((persona, index) => (
-                  <button
-                    key={persona.id}
-                    type="button"
-                    className="shrink-0 w-36 p-4 rounded-xl border-2 text-left transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
-                    style={{
-                      borderColor: persona.borderColor,
-                      backgroundColor: persona.bgColor,
-                      scrollSnapAlign: "start",
-                    }}
-                    onClick={() => setModalPersonaIndex(index)}
-                  >
-                    <div className="mb-2">
-                      <PersonaIcon emoji={persona.emoji} color={persona.color} size={28} />
-                    </div>
-                    <span className="font-display font-semibold block truncate" style={{ color: persona.color }}>
-                      {persona.name}
-                    </span>
-                    <span className="text-muted text-xs block truncate">{persona.role}</span>
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="shrink-0 w-10 h-10 rounded-full border border-border-light flex items-center justify-center text-secondary hover:text-primary hover:border-border-dark transition-colors"
-                onClick={() => scrollCarousel("next")}
-                aria-label="Next"
-              >
-                →
-              </button>
+            {/* Active Personas Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              {personasData.personas.map((persona, index) => (
+                <button
+                  key={persona.id}
+                  type="button"
+                  className="p-4 rounded-xl border border-border-light bg-surface text-left transition-all hover:shadow-md hover:border-border-dark focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 relative overflow-hidden"
+                  onClick={() => setModalPersonaIndex(index)}
+                >
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                    style={{ backgroundColor: persona.color }}
+                  />
+                  <div className="mb-2">
+                    <PersonaIcon emoji={persona.emoji} color={persona.color} size={28} />
+                  </div>
+                  <span className="font-display font-semibold block truncate text-sm" style={{ color: persona.color }}>
+                    {persona.name}
+                  </span>
+                  <span className="text-muted text-xs block truncate">{persona.role}</span>
+                </button>
+              ))}
             </div>
 
             {personasMessage && (
@@ -568,7 +840,7 @@ export default function Settings() {
                   <div className="p-4 overflow-y-auto space-y-4">
                     {/* Basic Info */}
                     <div>
-                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">기본 정보</h4>
+                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Basic Info</h4>
                       <div className="grid grid-cols-2 gap-4">
                         <label className="block">
                           <span className="text-xs text-secondary block mb-1">Name</span>
@@ -580,7 +852,7 @@ export default function Settings() {
                           />
                         </label>
                         <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Role (커스텀 라벨)</span>
+                          <span className="text-xs text-secondary block mb-1">Role (custom label)</span>
                           <input
                             type="text"
                             className="input-minimal w-full text-sm"
@@ -593,7 +865,7 @@ export default function Settings() {
 
                     {/* Style */}
                     <div>
-                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">스타일</h4>
+                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Style</h4>
                       <div className="grid grid-cols-2 gap-4">
                         <label className="block">
                           <span className="text-xs text-secondary block mb-1">Emoji</span>
@@ -636,7 +908,7 @@ export default function Settings() {
 
                     {/* Prompt */}
                     <div>
-                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">프롬프트</h4>
+                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Prompt</h4>
                       <label className="block">
                         <span className="text-xs text-secondary block mb-1">System Prompt ({personasData.personas[modalPersonaIndex].promptFile})</span>
                         <textarea
@@ -669,8 +941,371 @@ export default function Settings() {
                 </div>
               </div>
             )}
+
+            {/* Library Modal */}
+            {libraryModalOpen && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
+                onClick={(e) => e.target === e.currentTarget && setLibraryModalOpen(false)}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="library-modal-title"
+              >
+                <div
+                  className="rounded-2xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80 max-h-[90vh] w-full max-w-4xl flex flex-col"
+                  style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-4 border-b border-white/30 flex items-center justify-between shrink-0 rounded-t-2xl bg-white/40">
+                    <h3 id="library-modal-title" className="font-display text-lg font-semibold text-primary">
+                      Edit Persona List
+                    </h3>
+                    <button
+                      type="button"
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-primary hover:bg-white/50 transition-colors"
+                      onClick={() => setLibraryModalOpen(false)}
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="p-4 overflow-y-auto">
+                    {libraryLoading ? (
+                      <p className="text-muted text-sm text-center py-8">Loading library...</p>
+                    ) : (
+                      <>
+                        {/* Active Personas Section */}
+                        {libraryPersonas.filter(p => p.isActive).length > 0 && (
+                          <div className="mb-6">
+                            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              Active Personas ({libraryPersonas.filter(p => p.isActive).length})
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                              {libraryPersonas.filter(p => p.isActive).map((persona) => (
+                                <div
+                                  key={persona.id}
+                                  className="p-4 rounded-xl border border-border-light bg-white transition-all hover:shadow-md cursor-pointer relative overflow-hidden ring-2 ring-green-400/50 ring-offset-2"
+                                  onClick={() => { setEditingLibraryPersona(persona); setEditingLibraryData({ ...persona }); }}
+                                >
+                                  <div
+                                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                                    style={{ backgroundColor: persona.color }}
+                                  />
+                                  <div className="flex items-start justify-between gap-2 mb-2">
+                                    <span className="text-2xl">{persona.emoji}</span>
+                                    <button
+                                      type="button"
+                                      className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemovePersona(persona.id);
+                                      }}
+                                      disabled={personasSaving}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                  <span
+                                    className="font-display font-semibold block truncate"
+                                    style={{ color: persona.color }}
+                                  >
+                                    {persona.name}
+                                  </span>
+                                  <span className="text-muted text-xs block">{persona.role}</span>
+                                  <p className="text-xs text-secondary mt-2 line-clamp-2">
+                                    {persona.description}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Available Personas Section */}
+                        {libraryPersonas.filter(p => !p.isActive).length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
+                              Available Personas ({libraryPersonas.filter(p => !p.isActive).length})
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                              {libraryPersonas.filter(p => !p.isActive).map((persona) => (
+                                <div
+                                  key={persona.id}
+                                  className="p-4 rounded-xl border border-border-light bg-white transition-all hover:shadow-md cursor-pointer relative overflow-hidden"
+                                  onClick={() => { setEditingLibraryPersona(persona); setEditingLibraryData({ ...persona }); }}
+                                >
+                                  <div
+                                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                                    style={{ backgroundColor: persona.color }}
+                                  />
+                                  <div className="flex items-start justify-between gap-2 mb-2">
+                                    <span className="text-2xl">{persona.emoji}</span>
+                                    <button
+                                      type="button"
+                                      className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent hover:bg-accent/30 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleAddPersona(persona.id);
+                                      }}
+                                      disabled={personasSaving}
+                                    >
+                                      + Add
+                                    </button>
+                                  </div>
+                                  <span
+                                    className="font-display font-semibold block truncate"
+                                    style={{ color: persona.color }}
+                                  >
+                                    {persona.name}
+                                  </span>
+                                  <span className="text-muted text-xs block">{persona.role}</span>
+                                  <p className="text-xs text-secondary mt-2 line-clamp-2">
+                                    {persona.description}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="p-4 border-t border-white/30 flex justify-end shrink-0 rounded-b-2xl bg-white/40">
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      onClick={() => setLibraryModalOpen(false)}
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Library Persona Edit Modal */}
+            {editingLibraryPersona && editingLibraryData && (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
+                onClick={(e) => e.target === e.currentTarget && setEditingLibraryPersona(null)}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="library-edit-modal-title"
+              >
+                <div
+                  className="rounded-2xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80 max-h-[90vh] w-full max-w-2xl flex flex-col"
+                  style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-4 border-b border-white/30 flex items-center justify-between shrink-0 rounded-t-2xl bg-white/40">
+                    <h3 id="library-edit-modal-title" className="font-display text-lg font-semibold text-primary">
+                      Edit: {editingLibraryData.name}
+                    </h3>
+                    <button
+                      type="button"
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-primary hover:bg-white/50 transition-colors"
+                      onClick={() => setEditingLibraryPersona(null)}
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="p-4 overflow-y-auto space-y-4">
+                    {/* Basic Info */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Basic Info</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Name</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={editingLibraryData.name}
+                            onChange={(e) => setEditingLibraryData({ ...editingLibraryData, name: e.target.value })}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Role</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={editingLibraryData.role}
+                            onChange={(e) => setEditingLibraryData({ ...editingLibraryData, role: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Style */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Style</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Emoji</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={editingLibraryData.emoji}
+                            onChange={(e) => setEditingLibraryData({ ...editingLibraryData, emoji: e.target.value })}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Color</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={editingLibraryData.color}
+                            onChange={(e) => setEditingLibraryData({ ...editingLibraryData, color: e.target.value })}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Background</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={editingLibraryData.bgColor}
+                            onChange={(e) => setEditingLibraryData({ ...editingLibraryData, bgColor: e.target.value })}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs text-secondary block mb-1">Border</span>
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={editingLibraryData.borderColor}
+                            onChange={(e) => setEditingLibraryData({ ...editingLibraryData, borderColor: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Prompt */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Prompt</h4>
+                      <label className="block">
+                        <span className="text-xs text-secondary block mb-1">System Prompt ({editingLibraryData.promptFile})</span>
+                        <textarea
+                          className="input-minimal w-full text-sm font-mono min-h-[280px]"
+                          value={editingLibraryData.promptContent}
+                          onChange={(e) => setEditingLibraryData({ ...editingLibraryData, promptContent: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="p-4 border-t border-white/30 flex gap-2 justify-between shrink-0 rounded-b-2xl bg-white/40">
+                    <div>
+                      {editingLibraryPersona.isActive ? (
+                        <button
+                          type="button"
+                          className="text-sm px-3 py-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                          onClick={() => {
+                            handleRemovePersona(editingLibraryPersona.id);
+                            setEditingLibraryPersona(null);
+                          }}
+                          disabled={personasSaving}
+                        >
+                          Remove from Active
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-sm px-3 py-1.5 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-colors"
+                          onClick={() => {
+                            handleAddPersona(editingLibraryPersona.id);
+                            setEditingLibraryPersona(null);
+                          }}
+                          disabled={personasSaving}
+                        >
+                          + Add to Active
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="btn-secondary text-sm"
+                        onClick={() => setEditingLibraryPersona(null)}
+                      >
+                        Close
+                      </button>
+                      {editingLibraryPersona.isActive && (
+                        <button
+                          type="button"
+                          className="btn-primary text-sm"
+                          disabled={personasSaving}
+                          onClick={() => {
+                            // Find the persona in personasData and update it
+                            const idx = personasData.personas.findIndex(p => p.id === editingLibraryData.id);
+                            if (idx !== -1) {
+                              const updated = {
+                                ...personasData,
+                                personas: personasData.personas.map((p, i) =>
+                                  i === idx ? {
+                                    ...p,
+                                    name: editingLibraryData.name,
+                                    role: editingLibraryData.role,
+                                    emoji: editingLibraryData.emoji,
+                                    color: editingLibraryData.color,
+                                    bgColor: editingLibraryData.bgColor,
+                                    borderColor: editingLibraryData.borderColor,
+                                    promptContent: editingLibraryData.promptContent,
+                                  } : p
+                                ),
+                              };
+                              setPersonasData(updated);
+                              setPersonasSaving(true);
+                              fetch("/api/personas", {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(updated),
+                              })
+                                .then(async (res) => {
+                                  const data = await res.json().catch(() => ({}));
+                                  if (!res.ok) throw new Error(data?.error || "Failed to save");
+                                  setPersonasData(data);
+                                  setPersonasMessage({ type: "ok", text: "Persona saved!" });
+                                  loadLibrary();
+                                  setEditingLibraryPersona(null);
+                                })
+                                .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to save" }))
+                                .finally(() => setPersonasSaving(false));
+                            }
+                          }}
+                        >
+                          {personasSaving ? "Saving..." : "Save"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
+      </section>
+
+      {/* Data Storage Section */}
+      <section className="mt-8">
+        <h2 className="font-display text-lg font-semibold mb-4">Data Storage</h2>
+        <p className="text-sm text-secondary mb-4">
+          Posts and comments are stored locally in{" "}
+          <code className="font-mono text-xs bg-border-light px-1.5 py-0.5 rounded">server/data/</code>.
+        </p>
+        <button
+          type="button"
+          className="btn-secondary text-sm"
+          onClick={() => {
+            fetch("/api/open-data-folder", { method: "POST" })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.error) setMessage({ type: "error", text: data.error });
+              })
+              .catch(() => setMessage({ type: "error", text: "Failed to open folder" }));
+          }}
+        >
+          Open Data Folder
+        </button>
       </section>
     </div>
   );

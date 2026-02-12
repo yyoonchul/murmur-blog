@@ -71,7 +71,7 @@ function deleteComments(id: string): void {
   }
 }
 
-// GET /api/posts - 전체 글 목록 (content, comments 포함)
+// GET /api/posts - Get all posts (including content and comments)
 router.get("/", (_req, res) => {
   const metas = readMeta();
   const posts: Post[] = metas.map((meta) => ({
@@ -82,7 +82,7 @@ router.get("/", (_req, res) => {
   res.json(posts);
 });
 
-// GET /api/posts/:id - 개별 글
+// GET /api/posts/:id - Get a single post
 router.get("/:id", (req, res) => {
   const metas = readMeta();
   const meta = metas.find((p) => p.id === req.params.id);
@@ -98,7 +98,7 @@ router.get("/:id", (req, res) => {
   res.json(post);
 });
 
-// POST /api/posts - 새 글 작성
+// POST /api/posts - Create a new post
 router.post("/", (req, res) => {
   const { title, content } = req.body;
   if (!title || !content) {
@@ -121,7 +121,7 @@ router.post("/", (req, res) => {
   metas.unshift(newMeta);
   writeMeta(metas);
   writeContent(id, content);
-  writeComments(id, []); // 빈 댓글 파일 생성
+  writeComments(id, []); // Create empty comments file
 
   res.status(201).json({ ...newMeta, content, comments: [] });
 
@@ -132,7 +132,7 @@ router.post("/", (req, res) => {
   });
 });
 
-// PUT /api/posts/:id - 글 수정
+// PUT /api/posts/:id - Update a post
 router.put("/:id", (req, res) => {
   const { title, content } = req.body;
   if (!title || !content) {
@@ -159,7 +159,7 @@ router.put("/:id", (req, res) => {
   res.json({ ...metas[index], content, comments: readComments(req.params.id) });
 });
 
-// DELETE /api/posts/:id - 글 삭제
+// DELETE /api/posts/:id - Delete a post
 router.delete("/:id", (req, res) => {
   const metas = readMeta();
   const index = metas.findIndex((p) => p.id === req.params.id);
@@ -172,7 +172,7 @@ router.delete("/:id", (req, res) => {
   metas.splice(index, 1);
   writeMeta(metas);
   deleteContent(id);
-  deleteComments(id); // 댓글 파일도 삭제
+  deleteComments(id); // Delete comments file as well
 
   res.json({ success: true });
 });

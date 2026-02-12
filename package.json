@@ -1,7 +1,24 @@
 {
-  "name": "monolog-blog",
-  "private": true,
-  "version": "0.0.0",
+  "name": "monolog",
+  "version": "1.0.0",
+  "description": "A quiet blog where AI personas read your posts and leave thoughtful comments",
+  "keywords": [
+    "ai",
+    "blog",
+    "writing",
+    "feedback",
+    "claude",
+    "openai",
+    "gemini",
+    "markdown",
+    "persona"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/monolog.git"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/monolog#readme",
   "type": "module",
   "scripts": {
     "dev": "nodemon --ignore server/data/ --exec tsx server/index.ts",
@@ -10,10 +27,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
     "marked": "^15.0.0",
+    "openai": "^6.21.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.0",

@@ -1,0 +1,224 @@
+{
+  "presets": [
+    {
+      "id": "mina",
+      "name": "Mina",
+      "role": "First Reader",
+      "emoji": "💛",
+      "color": "#CA8A04",
+      "bgColor": "#FEFCE8",
+      "borderColor": "#FEF08A",
+      "promptFile": "mina-reader.md",
+      "description": "Your most loyal fan who celebrates what works and wants more"
+    },
+    {
+      "id": "eunseo",
+      "name": "Grace",
+      "role": "Writing Companion",
+      "emoji": "✒️",
+      "color": "#7C3AED",
+      "bgColor": "#FAF5FF",
+      "borderColor": "#DDD6FE",
+      "promptFile": "eunseo-writer.md",
+      "description": "A fellow writer who offers gentle suggestions to elevate your work"
+    },
+    {
+      "id": "jihoon",
+      "name": "James",
+      "role": "Practical Mentor",
+      "emoji": "⚖️",
+      "color": "#6B7280",
+      "bgColor": "#F9FAFB",
+      "borderColor": "#E5E7EB",
+      "promptFile": "jihoon-mentor.md",
+      "description": "Balanced mentor who reality-checks ideas with practical wisdom"
+    },
+    {
+      "id": "suhyun",
+      "name": "Sam",
+      "role": "Logic Critic",
+      "emoji": "🔬",
+      "color": "#2563EB",
+      "bgColor": "#EFF6FF",
+      "borderColor": "#BFDBFE",
+      "promptFile": "suhyun-critic.md",
+      "description": "Analytical mind who dissects arguments and finds logical gaps"
+    },
+    {
+      "id": "doyun",
+      "name": "Dylan",
+      "role": "Contrarian",
+      "emoji": "⚡",
+      "color": "#DC2626",
+      "bgColor": "#FEF2F2",
+      "borderColor": "#FECACA",
+      "promptFile": "doyun-contrarian.md",
+      "description": "Devil's advocate who strengthens ideas by flipping them"
+    },
+    {
+      "id": "philosopher",
+      "name": "Sophia",
+      "role": "Philosopher",
+      "emoji": "🔭",
+      "color": "#8B5CF6",
+      "bgColor": "#F5F3FF",
+      "borderColor": "#DDD6FE",
+      "promptFile": "library/philosopher.md",
+      "description": "Explores deep meaning and philosophical implications"
+    },
+    {
+      "id": "tech-expert",
+      "name": "Alex",
+      "role": "Tech Expert",
+      "emoji": "💻",
+      "color": "#0891B2",
+      "bgColor": "#ECFEFF",
+      "borderColor": "#A5F3FC",
+      "promptFile": "library/tech-expert.md",
+      "description": "Analyzes technical perspectives and feasibility"
+    },
+    {
+      "id": "artist",
+      "name": "Luna",
+      "role": "Artist",
+      "emoji": "🎨",
+      "color": "#EC4899",
+      "bgColor": "#FDF2F8",
+      "borderColor": "#FBCFE8",
+      "promptFile": "library/artist.md",
+      "description": "Focuses on creativity and emotional expression"
+    },
+    {
+      "id": "scientist",
+      "name": "Dr. Chen",
+      "role": "Scientist",
+      "emoji": "🔬",
+      "color": "#10B981",
+      "bgColor": "#ECFDF5",
+      "borderColor": "#A7F3D0",
+      "promptFile": "library/scientist.md",
+      "description": "Applies scientific thinking and evidence-based analysis"
+    },
+    {
+      "id": "business-analyst",
+      "name": "Marcus",
+      "role": "Business Analyst",
+      "emoji": "📊",
+      "color": "#F59E0B",
+      "bgColor": "#FFFBEB",
+      "borderColor": "#FDE68A",
+      "promptFile": "library/business-analyst.md",
+      "description": "Provides strategic and market perspectives"
+    },
+    {
+      "id": "historian",
+      "name": "Henry",
+      "role": "Historian",
+      "emoji": "📜",
+      "color": "#78716C",
+      "bgColor": "#FAFAF9",
+      "borderColor": "#D6D3D1",
+      "promptFile": "library/historian.md",
+      "description": "Analyzes historical context and patterns"
+    },
+    {
+      "id": "psychologist",
+      "name": "Sarah",
+      "role": "Psychologist",
+      "emoji": "🧠",
+      "color": "#A855F7",
+      "bgColor": "#FAF5FF",
+      "borderColor": "#E9D5FF",
+      "promptFile": "library/psychologist.md",
+      "description": "Offers psychological insights and motivation analysis"
+    },
+    {
+      "id": "journalist",
+      "name": "Jake",
+      "role": "Journalist",
+      "emoji": "📰",
+      "color": "#64748B",
+      "bgColor": "#F8FAFC",
+      "borderColor": "#CBD5E1",
+      "promptFile": "library/journalist.md",
+      "description": "Provides fact-checking and storytelling"
+    },
+    {
+      "id": "poet",
+      "name": "Sky",
+      "role": "Poet",
+      "emoji": "✨",
+      "color": "#6366F1",
+      "bgColor": "#EEF2FF",
+      "borderColor": "#C7D2FE",
+      "promptFile": "library/poet.md",
+      "description": "Appreciates beauty and rhythm in language"
+    },
+    {
+      "id": "skeptic",
+      "name": "Thomas",
+      "role": "Skeptic",
+      "emoji": "🤔",
+      "color": "#EF4444",
+      "bgColor": "#FEF2F2",
+      "borderColor": "#FECACA",
+      "promptFile": "library/skeptic.md",
+      "description": "Applies critical thinking and verification"
+    },
+    {
+      "id": "optimist",
+      "name": "Joy",
+      "role": "Optimist",
+      "emoji": "🌟",
+      "color": "#FBBF24",
+      "bgColor": "#FFFBEB",
+      "borderColor": "#FDE68A",
+      "promptFile": "library/optimist.md",
+      "description": "Highlights positive perspectives and possibilities"
+    },
+    {
+      "id": "ethicist",
+      "name": "Justice",
+      "role": "Ethicist",
+      "emoji": "⚖️",
+      "color": "#0D9488",
+      "bgColor": "#F0FDFA",
+      "borderColor": "#99F6E4",
+      "promptFile": "library/ethicist.md",
+      "description": "Explores moral implications and values"
+    },
+    {
+      "id": "futurist",
+      "name": "Nova",
+      "role": "Futurist",
+      "emoji": "🚀",
+      "color": "#3B82F6",
+      "bgColor": "#EFF6FF",
+      "borderColor": "#BFDBFE",
+      "promptFile": "library/futurist.md",
+      "description": "Predicts trends and future implications"
+    },
+    {
+      "id": "storyteller",
+      "name": "Story",
+      "role": "Storyteller",
+      "emoji": "📖",
+      "color": "#D97706",
+      "bgColor": "#FFF7ED",
+      "borderColor": "#FED7AA",
+      "promptFile": "library/storyteller.md",
+      "description": "Analyzes narrative structure and characters"
+    },
+    {
+      "id": "coach",
+      "name": "Mo",
+      "role": "Coach",
+      "emoji": "💪",
+      "color": "#059669",
+      "bgColor": "#ECFDF5",
+      "borderColor": "#6EE7B7",
+      "promptFile": "library/coach.md",
+      "description": "Provides actionable advice and motivation"
+    }
+  ]
+}
