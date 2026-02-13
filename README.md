@@ -1,26 +1,55 @@
 # Monolog
 
-> A quiet blog where AI personas read your posts and leave thoughtful comments.
+> 당신의 글에 첫 번째 댓글을 달아주는 AI 블로그
 
-## Why Monolog?
+## 첫댓의 힘
 
-글을 쓰고 나면 누군가의 반응이 궁금합니다. 하지만 공개하기엔 아직 다듬어지지 않은 생각들...
+인터넷에서 첫 번째 댓글은 글 전체의 분위기를 좌지우지합니다. 그런데 현실은? 대부분의 글은 첫 댓글조차 받지 못합니다.
 
-Monolog는 이런 순간을 위해 만들어졌습니다:
+블로그를 쓰는 사람이라면 공감할 겁니다. 500뷰에 댓글 0개. 실망감은 둘째 치고, **피드백이 없으니 글이 나아지지 않습니다.** 혼자 쓰고, 혼자 읽고, 혼자 끝나는 글.
 
-- 공개 전에 다양한 관점의 피드백을 받고 싶을 때
-- 혼자 쓰지만 대화하듯 글을 발전시키고 싶을 때
-- 내 글의 논리적 허점이나 보완점을 찾고 싶을 때
+Monolog는 이 문제를 해결합니다. 글을 올리면 **서로 다른 관점을 가진 5명의 AI 독자**가 당신의 글을 읽고 댓글을 남깁니다. 여러분의 글의 첫 번째 독자가 되어줍니다.
 
-5명의 AI 페르소나가 각자의 관점에서 당신의 글을 읽고 생각을 남깁니다.
+## How It Works
 
-## Features
+1. **글을 쓴다** — 마크다운 에디터로 글을 작성합니다
+2. **AI가 읽는다** — 5명의 페르소나가 각자의 관점에서 글을 읽습니다
+3. **댓글이 달린다** — 따뜻한 공감부터 날카로운 지적까지, 다양한 피드백이 달립니다
+4. **대화가 이어진다** — 댓글에 대댓글을 달면 AI가 답글을 달고, 내 댓글에 AI가 반응합니다
 
-- **AI-Powered Feedback** — 여러 AI 페르소나가 다양한 관점에서 글에 대한 피드백을 남김
-- **Persona Library** — 15개 이상의 프리셋 페르소나 제공, 직접 커스터마이징 가능
-- **Multi-LLM Support** — Claude, GPT, Gemini 중 원하는 모델 선택
-- **Local-First** — 모든 데이터가 로컬에 저장, 글이 외부에 공유되지 않음
-- **Markdown Editor** — 마크다운으로 작성하고 실시간 미리보기
+## Your First Readers
+
+당신의 글을 가장 먼저 읽어주는 5명의 AI 독자들:
+
+| 페르소나 | 역할 | 이런 댓글을 남깁니다 |
+|---------|------|------------------|
+| **Mina** | First Reader | 어떤 부분이 마음에 와닿았는지, 따뜻한 첫인상 |
+| **Eunseo** | Writing Fellow | 문장이 살아있는 곳, 흐름이 끊기는 곳 |
+| **Jihoon** | Practical Mentor | 이거 실제로 되는 건지, 현실성 체크 |
+| **Suhyun** | Argument Critic | 논리의 허점, 숨어있는 전제를 찾아냄 |
+| **Doyun** | Contrarian | 모두가 동의할 때 반대 의견을 던짐 |
+
+이 외에도 **15개 이상의 페르소나 라이브러리**에서 원하는 독자를 추가할 수 있습니다. VC 심사역처럼 피칭 피드백을 주는 페르소나, 시인처럼 글의 감정을 읽는 페르소나 등. 직접 만들 수도 있습니다.
+
+## When To Use
+
+- **세상에 공개하기 부끄러운 글** — 아직 다듬어지지 않은 생각, 논란이 될 수 있는 주제
+- **베타 단계의 피드백이 필요할 때** — 공개 전에 다양한 관점에서 검증하고 싶을 때
+- **누군가의 반응이 필요한 순간** — 혼자 쓰지만, 대화하듯 글을 발전시키고 싶을 때
+
+## Privacy & Local-First
+
+서버와 DB를 연결하지 않은 건 시간이 없어서가 아닙니다.
+
+Monolog의 철학은 **프라이버시와 로컬 퍼스트**입니다. 공개하기 부끄러운 글을 쓰는 사람이 타깃이기에, 당신의 글은 당신의 컴퓨터에서만 존재해야 합니다.
+
+- **모든 데이터는 로컬에 저장** — 글, 댓글, 설정 모두 내 컴퓨터의 파일
+- **BYOK (Bring Your Own Key)** — 내 API 키로 내 계정의 LLM을 사용
+- **서버 없음** — 클라우드에 아무것도 올라가지 않음
+
+> 추후에는 온디바이스 LLM을 통한 완전한 로컬 구현을 지향합니다.
+
+---
 
 ## Quick Start
 
@@ -32,58 +61,28 @@ Monolog는 이런 순간을 위해 만들어졌습니다:
   - [OpenAI](https://platform.openai.com/) — GPT
   - [Google AI Studio](https://aistudio.google.com/) — Gemini
 
-### 2. 설치
+### 2. 설치 & 실행
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/monolog.git
 cd monolog
 npm install
-```
-
-### 3. 실행
-
-```bash
 npm run dev
 ```
 
 브라우저에서 http://localhost:3001 을 엽니다.
 
-### 4. API 키 설정
+### 3. API 키 설정
 
 1. 좌측 사이드바에서 **Settings** 클릭
 2. **Providers** 탭에서 사용할 AI 프로바이더의 API Key를 입력하고 **Save**
 3. 프로바이더를 클릭하여 **Active**로 설정
 
-이것으로 설정 완료입니다. 글을 쓰면 AI 페르소나들이 자동으로 코멘트를 남깁니다.
+설정 완료. 이제 글을 쓰면 AI 페르소나들이 자동으로 첫 댓글을 남깁니다.
 
 > **참고**: API 키는 `server/data/settings.json`에 로컬 저장되며, `.gitignore`로 커밋에서 제외됩니다.
 
-## Personas
-
-### 기본 페르소나
-
-| 페르소나 | 역할 | 관점 |
-|---------|------|------|
-| Mina | First Reader | 감정적 공감, 어떤 부분이 와닿았는지 |
-| Eunseo | Writing Fellow | 문체, 문장력, 글의 흐름 |
-| Jihoon | Practical Mentor | 현실성 검토, 실행 가능성 |
-| Suhyun | Argument Critic | 논리적 허점, 숨은 전제 |
-| Doyun | Contrarian | 반대 논거, 합의에 대한 의문 |
-
-### 페르소나 라이브러리
-
-Settings > Personas 탭에서 15개 이상의 추가 페르소나를 활성화/비활성화할 수 있습니다.
-
-- **Philosopher** — 의미와 전제에 대한 깊은 질문
-- **Scientist** — 증거 기반 분석과 방법론
-- **Poet** — 리듬, 이미지, 감정의 진실
-- **Skeptic** — 주장에 대한 검증 요구
-- 그 외 다수...
-
-### 커스텀 페르소나
-
-`server/data/persona/` 디렉토리에 마크다운 파일을 추가하여 나만의 페르소나를 만들 수 있습니다.
-자세한 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
+---
 
 ## Project Structure
 
@@ -102,9 +101,15 @@ monolog/
 │       ├── posts/          #     Blog posts (.md) + metadata
 │       ├── persona/        #     Persona configs + library
 │       └── settings.json   #     App settings (auto-generated)
-├── settings.example.json   # Settings file example
 └── package.json
 ```
+
+## Tech Stack
+
+- [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
+- [Express](https://expressjs.com/)
+- [Tailwind CSS 4](https://tailwindcss.com/)
+- [TypeScript](https://www.typescriptlang.org/)
 
 ## Data Files
 
@@ -118,17 +123,8 @@ monolog/
 > 모든 데이터 파일은 로컬에만 저장되며, 개인 데이터는 `.gitignore`로 커밋에서 제외됩니다.
 > 각 데이터 파일의 구조는 같은 폴더의 `.example` 파일을 참고하세요.
 
-## Tech Stack
-
-- [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
-- [Express](https://expressjs.com/)
-- [Tailwind CSS 4](https://tailwindcss.com/)
-- [TypeScript](https://www.typescriptlang.org/)
-
-## API Reference
-
 <details>
-<summary>API 엔드포인트 목록 (클릭하여 펼치기)</summary>
+<summary>API Reference (클릭하여 펼치기)</summary>
 
 ### Posts
 
