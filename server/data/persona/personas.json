@@ -51,14 +51,14 @@
       "promptFile": "library/philosopher.md"
     },
     {
-      "id": "artist",
-      "name": "Luna",
-      "role": "Artist",
-      "emoji": "🎨",
-      "color": "#EC4899",
-      "bgColor": "#FDF2F8",
-      "borderColor": "#FBCFE8",
-      "promptFile": "library/artist.md"
+      "id": "skeptic",
+      "name": "Thomas",
+      "role": "Skeptic",
+      "emoji": "🤔",
+      "color": "#EF4444",
+      "bgColor": "#FEF2F2",
+      "borderColor": "#FECACA",
+      "promptFile": "library/skeptic.md"
     }
   ],
   "feedbackOrder": [
@@ -67,7 +67,7 @@
     "jihoon",
     "suhyun",
     "philosopher",
-    "artist"
+    "skeptic"
   ],
   "feedbackOrderReason": "Warm feedback first → neutral → challenging. The writer receives encouraging feedback first, then increasingly sharp perspectives."
 }

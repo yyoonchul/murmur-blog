@@ -97,7 +97,7 @@ export async function generateInitialComments(
       console.log(`[AI]   System prompt length: ${system.length}, user message length: ${userMessage.length}`);
       console.log(`[AI]   Calling sendMessage...`);
 
-      const content = await sendMessage(userMessage, { system, maxTokens: 1024 });
+      const content = await sendMessage(userMessage, { system, maxTokens: 4096 });
       console.log(`[AI]   sendMessage returned: "${content.substring(0, 100)}..." (length: ${content.length})`);
 
       if (content.trim()) {
@@ -145,7 +145,7 @@ export async function generateInitialComments(
       const userMessage = buildUserMessage(post, threadContext);
       console.log(`[AI]   Calling sendMessage for reply...`);
 
-      const content = await sendMessage(userMessage, { system, maxTokens: 1024 });
+      const content = await sendMessage(userMessage, { system, maxTokens: 4096 });
       console.log(`[AI]   Reply response: "${content.substring(0, 100)}..." (length: ${content.length})`);
 
       if (content.trim()) {
@@ -219,7 +219,7 @@ export async function generateReply(
     const userMessage = buildUserMessage(post, threadContext);
     console.log(`[AI]   Calling sendMessage for reply from ${responderId}...`);
 
-    const content = await sendMessage(userMessage, { system, maxTokens: 1024 });
+    const content = await sendMessage(userMessage, { system, maxTokens: 4096 });
     console.log(`[AI]   Reply response: "${content.substring(0, 100)}..." (length: ${content.length})`);
 
     if (content.trim()) {

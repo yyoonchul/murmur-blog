@@ -4,10 +4,16 @@ node_modules/
 # Build
 dist/
 
-# Data files (personal posts, settings with API key)
-server/data/posts.json
-server/data/comments.json
+# Environment
+.env
+
+# Data files (personal posts, settings with API keys)
 server/data/settings.json
+server/data/comments.json
+server/data/posts/posts.json
+server/data/posts/*-comments.json
+server/data/posts/*.md
+!server/data/posts/example.md
 
 # Logs
 *.log
@@ -23,5 +29,5 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-#clode-code
+# Claude
 .claude

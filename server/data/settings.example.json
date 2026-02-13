@@ -1,0 +1,12 @@
+{
+  "PROVIDER": "anthropic",
+  "MODEL": "claude-haiku-4-5-20251001",
+  "ANTHROPIC_API_KEY": "",
+  "OPENAI_API_KEY": "",
+  "GOOGLE_API_KEY": "",
+  "CUSTOM_MODELS": {
+    "anthropic": [],
+    "openai": [],
+    "google": []
+  }
+}

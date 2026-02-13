@@ -81,7 +81,7 @@ export class OpenAIProvider implements LLMProvider {
 
     const response = await client.chat.completions.create({
       model,
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
       messages,
     });
 
@@ -106,7 +106,7 @@ export class OpenAIProvider implements LLMProvider {
 
     const response = await client.chat.completions.create({
       model,
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
       messages: apiMessages,
     });
 

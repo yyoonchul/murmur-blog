@@ -44,7 +44,7 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", message: "Monolog server is running" });
 });
 
-const RESERVED_SETTINGS_KEYS = ["MODEL", "AVAILABLE_MODELS", "PROVIDER", "CUSTOM_MODELS"];
+const RESERVED_SETTINGS_KEYS = ["MODEL", "AVAILABLE_MODELS", "PROVIDER", "CUSTOM_MODELS", "PROVIDER_MODELS"];
 
 app.get("/api/settings", onlyLocalhost, (_req, res) => {
   const settings = readSettings();
@@ -54,9 +54,27 @@ app.get("/api/settings", onlyLocalhost, (_req, res) => {
   // Get models from the current provider
   const availableModels = provider.getAvailableModels();
 
+  // Get models for ALL providers
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allProviderModels: Record<string, any[]> = {};
+  const providerModels: Record<string, string> = {};
+  const storedProviderModels = settings.PROVIDER_MODELS || {};
+  for (const pt of getProviderTypes()) {
+    const p = getProvider(pt);
+    allProviderModels[pt] = p.getAvailableModels();
+    providerModels[pt] = storedProviderModels[pt] || p.getDefaultModel();
+  }
+  // Ensure active provider's model is current
+  providerModels[currentProvider] = settings.MODEL || provider.getDefaultModel();
+
   // Build API keys list (exclude reserved keys)
   const apiKeys = Object.entries(settings)
-    .filter(([key, value]) => !RESERVED_SETTINGS_KEYS.includes(key) && typeof value === "string")
+    .filter(
+      ([key, value]) =>
+        !RESERVED_SETTINGS_KEYS.includes(key) &&
+        typeof value === "string" &&
+        value.trim().length > 0
+    )
     .map(([name, value]) => ({
       name,
       masked: typeof value === "string" && value.length > 11
@@ -70,20 +88,37 @@ app.get("/api/settings", onlyLocalhost, (_req, res) => {
     apiKeys,
     model: settings.MODEL || provider.getDefaultModel(),
     availableModels,
+    allProviderModels,
+    providerModels,
   });
 });
 
 app.put("/api/settings", onlyLocalhost, (req, res) => {
-  const { apiKey, apiKeyName, model, deleteApiKey, renameFrom, provider: newProvider } = req.body ?? {};
+  const { apiKey, apiKeyName, model, deleteApiKey, renameFrom, provider: newProvider, providerModel } = req.body ?? {};
   const settings = readSettings();
   const keyName = apiKeyName || "ANTHROPIC_API_KEY";
 
   // Handle provider change
   if (newProvider && getProviderTypes().includes(newProvider)) {
+    // Save current model for the current provider
+    if (!settings.PROVIDER_MODELS) settings.PROVIDER_MODELS = {};
+    const currentProv = settings.PROVIDER || "anthropic";
+    if (settings.MODEL) {
+      settings.PROVIDER_MODELS[currentProv] = settings.MODEL;
+    }
     settings.PROVIDER = newProvider;
-    // Reset model to the new provider's default
     const providerInstance = getProvider(newProvider as ProviderType);
-    settings.MODEL = providerInstance.getDefaultModel();
+    settings.MODEL = settings.PROVIDER_MODELS[newProvider] || providerInstance.getDefaultModel();
+  }
+
+  // Handle per-provider model selection
+  if (providerModel && providerModel.provider && providerModel.model) {
+    if (!settings.PROVIDER_MODELS) settings.PROVIDER_MODELS = {};
+    settings.PROVIDER_MODELS[providerModel.provider] = providerModel.model;
+    // If it's the active provider, also update MODEL
+    if (providerModel.provider === (settings.PROVIDER || "anthropic")) {
+      settings.MODEL = providerModel.model;
+    }
   }
 
   if (deleteApiKey === true) {
@@ -110,8 +145,24 @@ app.put("/api/settings", onlyLocalhost, (req, res) => {
   const providerInstance = getProvider(currentProvider);
   const availableModels = providerInstance.getAvailableModels();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allProviderModels: Record<string, any[]> = {};
+  const providerModels: Record<string, string> = {};
+  const storedProviderModels = updated.PROVIDER_MODELS || {};
+  for (const pt of getProviderTypes()) {
+    const p = getProvider(pt);
+    allProviderModels[pt] = p.getAvailableModels();
+    providerModels[pt] = storedProviderModels[pt] || p.getDefaultModel();
+  }
+  providerModels[currentProvider] = updated.MODEL || providerInstance.getDefaultModel();
+
   const apiKeys = Object.entries(updated)
-    .filter(([key, value]) => !RESERVED_SETTINGS_KEYS.includes(key) && typeof value === "string")
+    .filter(
+      ([key, value]) =>
+        !RESERVED_SETTINGS_KEYS.includes(key) &&
+        typeof value === "string" &&
+        value.trim().length > 0
+    )
     .map(([name, value]) => ({
       name,
       masked: typeof value === "string" && value.length > 11
@@ -125,6 +176,8 @@ app.put("/api/settings", onlyLocalhost, (req, res) => {
     apiKeys,
     model: updated.MODEL || providerInstance.getDefaultModel(),
     availableModels,
+    allProviderModels,
+    providerModels,
   });
 });
 
@@ -162,16 +215,11 @@ app.post("/api/settings/custom-models", onlyLocalhost, (req, res) => {
   settings.CUSTOM_MODELS[provider].push(newModel);
   writeSettings(settings);
 
-  // Return updated settings
-  const updated = readSettings();
-  const currentProvider = (updated.PROVIDER || "anthropic") as ProviderType;
-  const providerInstance = getProvider(currentProvider);
-  const availableModels = providerInstance.getAvailableModels();
-
+  // Return updated models for the target provider
+  const targetProvider = getProvider(provider as ProviderType);
   res.json({
-    provider: currentProvider,
-    availableModels,
-    customModels: updated.CUSTOM_MODELS,
+    provider,
+    availableModels: targetProvider.getAvailableModels(),
   });
 });
 
@@ -197,16 +245,11 @@ app.delete("/api/settings/custom-models/:provider/:modelId", onlyLocalhost, (req
   settings.CUSTOM_MODELS[provider].splice(index, 1);
   writeSettings(settings);
 
-  // Return updated settings
-  const updated = readSettings();
-  const currentProvider = (updated.PROVIDER || "anthropic") as ProviderType;
-  const providerInstance = getProvider(currentProvider);
-  const availableModels = providerInstance.getAvailableModels();
-
+  // Return updated models for the target provider
+  const targetProvider = getProvider(provider as ProviderType);
   res.json({
-    provider: currentProvider,
-    availableModels,
-    customModels: updated.CUSTOM_MODELS,
+    provider,
+    availableModels: targetProvider.getAvailableModels(),
   });
 });
 

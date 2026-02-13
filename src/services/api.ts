@@ -10,6 +10,16 @@ export interface ServerComment {
   parentId?: string;
 }
 
+export interface SettingsApiKeyEntry {
+  name: string;
+  masked: string;
+}
+
+export interface SettingsSummary {
+  provider: "anthropic" | "openai" | "google";
+  apiKeys: SettingsApiKeyEntry[];
+}
+
 export async function getPosts(): Promise<Post[]> {
   const res = await fetch(`${API_BASE}/posts`);
   if (!res.ok) throw new Error("Failed to fetch posts");
@@ -77,5 +87,11 @@ export async function generateComments(postId: string): Promise<{ comments: Serv
     headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) throw new Error("Failed to generate comments");
+  return res.json();
+}
+
+export async function getSettingsSummary(): Promise<SettingsSummary> {
+  const res = await fetch(`${API_BASE}/settings`);
+  if (!res.ok) throw new Error("Failed to fetch settings");
   return res.json();
 }

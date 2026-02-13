@@ -2,26 +2,38 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getApiKey, readSettings } from "../settings.js";
 import type { LLMProvider, LLMOptions, LLMMessage, LLMModelInfo } from "./types.js";
 
-const DEFAULT_MODEL = "gemini-3-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
 const GEMINI_MODELS: LLMModelInfo[] = [
   {
-    id: "gemini-3-pro",
-    name: "Gemini 3 Pro",
-    description: "Most capable reasoning model",
+    id: "gemini-3-pro-preview",
+    name: "Gemini 3 Pro (Preview)",
+    description: "Most intelligent multimodal model",
     latency: "Moderate",
   },
   {
-    id: "gemini-3-flash",
-    name: "Gemini 3 Flash",
-    description: "Fast and efficient",
+    id: "gemini-3-flash-preview",
+    name: "Gemini 3 Flash (Preview)",
+    description: "Balanced speed and intelligence",
     latency: "Fast",
   },
   {
-    id: "gemini-2.0-flash",
-    name: "Gemini 2.0 Flash",
-    description: "Previous generation",
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
+    description: "Advanced thinking model",
+    latency: "Moderate",
+  },
+  {
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    description: "Best price-performance",
     latency: "Fast",
+  },
+  {
+    id: "gemini-2.5-flash-lite",
+    name: "Gemini 2.5 Flash-Lite",
+    description: "Ultra fast, cost-efficient",
+    latency: "Fastest",
   },
 ];
 

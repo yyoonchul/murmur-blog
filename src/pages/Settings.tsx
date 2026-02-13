@@ -64,11 +64,11 @@ type ApiKeyEntry = {
 
 type ProviderType = "anthropic" | "openai" | "google";
 
-const PROVIDER_INFO: Record<ProviderType, { name: string; keyName: string }> = {
-  anthropic: { name: "Anthropic (Claude)", keyName: "ANTHROPIC_API_KEY" },
-  openai: { name: "OpenAI (GPT)", keyName: "OPENAI_API_KEY" },
-  google: { name: "Google (Gemini)", keyName: "GOOGLE_API_KEY" },
-};
+const PROVIDERS: { id: ProviderType; name: string; keyName: string; description: string }[] = [
+  { id: "anthropic", name: "Anthropic", keyName: "ANTHROPIC_API_KEY", description: "Claude models" },
+  { id: "openai", name: "OpenAI", keyName: "OPENAI_API_KEY", description: "GPT models" },
+  { id: "google", name: "Google", keyName: "GOOGLE_API_KEY", description: "Gemini models" },
+];
 
 type SettingsState = {
   provider: ProviderType;
@@ -76,6 +76,8 @@ type SettingsState = {
   apiKeys: ApiKeyEntry[];
   model: string;
   availableModels: ModelOption[];
+  allProviderModels: Record<string, ModelOption[]>;
+  providerModels: Record<string, string>;
 };
 
 interface Persona {
@@ -110,7 +112,16 @@ interface LibraryPersona {
   promptContent: string;
 }
 
+type SettingsTab = "providers" | "personas" | "data";
+
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: "providers", label: "Providers" },
+  { id: "personas", label: "Personas" },
+  { id: "data", label: "Data" },
+];
+
 export default function Settings() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [state, setState] = useState<SettingsState>({
@@ -119,14 +130,16 @@ export default function Settings() {
     apiKeys: [],
     model: "",
     availableModels: [],
+    allProviderModels: {},
+    providerModels: {},
   });
-  const [providerModalOpen, setProviderModalOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [apiKeyName, setApiKeyName] = useState("API_KEY");
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
-  const [editingApiKey, setEditingApiKey] = useState<string | null>(null); // null or key name being edited
-  const [addingApiKey, setAddingApiKey] = useState(false);
-  const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({
+    ANTHROPIC_API_KEY: "",
+    OPENAI_API_KEY: "",
+    GOOGLE_API_KEY: "",
+  });
+  const [openModelDropdown, setOpenModelDropdown] = useState<ProviderType | null>(null);
   const [addingCustomModel, setAddingCustomModel] = useState(false);
   const [customModelId, setCustomModelId] = useState("");
   const [customModelName, setCustomModelName] = useState("");
@@ -141,14 +154,24 @@ export default function Settings() {
     feedbackOrderReason: "",
   });
   const [personasMessage, setPersonasMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
-  const [modalPersonaIndex, setModalPersonaIndex] = useState<number | null>(null);
 
   // Library state
-  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [libraryPersonas, setLibraryPersonas] = useState<LibraryPersona[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [editingLibraryPersona, setEditingLibraryPersona] = useState<LibraryPersona | null>(null);
-  const [editingLibraryData, setEditingLibraryData] = useState<LibraryPersona | null>(null); // Local edits
+  const [editingLibraryData, setEditingLibraryData] = useState<LibraryPersona | null>(null);
+
+  const applyStateFromData = (data: Record<string, unknown>) => {
+    setState((prev) => ({
+      provider: (data.provider as ProviderType) ?? prev.provider,
+      providers: (data.providers as ProviderType[]) ?? prev.providers,
+      apiKeys: (data.apiKeys as ApiKeyEntry[]) ?? prev.apiKeys,
+      model: (data.model as string) ?? prev.model,
+      availableModels: (data.availableModels as ModelOption[]) ?? prev.availableModels,
+      allProviderModels: (data.allProviderModels as Record<string, ModelOption[]>) ?? prev.allProviderModels,
+      providerModels: (data.providerModels as Record<string, string>) ?? prev.providerModels,
+    }));
+  };
 
   useEffect(() => {
     fetch("/api/settings")
@@ -157,14 +180,8 @@ export default function Settings() {
         if (!res.ok) {
           throw new Error(data?.error || `Failed to load settings (${res.status})`);
         }
-        setState({
-          provider: data.provider ?? "anthropic",
-          providers: data.providers ?? ["anthropic", "openai", "google"],
-          apiKeys: data.apiKeys ?? [],
-          model: data.model ?? "",
-          availableModels: data.availableModels ?? [],
-        });
-              })
+        applyStateFromData(data);
+      })
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to load settings" }))
       .finally(() => setLoading(false));
 
@@ -178,6 +195,9 @@ export default function Settings() {
       })
       .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to load personas" }))
       .finally(() => setPersonasLoading(false));
+
+    // Load library personas when component mounts
+    loadLibrary();
   }, []);
 
   const updateSettings = (body: Record<string, unknown>) => {
@@ -191,46 +211,31 @@ export default function Settings() {
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || `Failed to save (${res.status})`);
-        setState({
-          provider: data.provider ?? "anthropic",
-          providers: data.providers ?? ["anthropic", "openai", "google"],
-          apiKeys: data.apiKeys ?? [],
-          model: data.model ?? "",
-          availableModels: data.availableModels ?? [],
-        });
-                return data;
+        applyStateFromData(data);
+        return data;
       })
       .finally(() => setSaving(false));
   };
 
+  // --- Provider & Model handlers ---
+
   const handleSelectProvider = (newProvider: ProviderType) => {
+    const providerName = PROVIDERS.find((p) => p.id === newProvider)?.name || newProvider;
     updateSettings({ provider: newProvider })
-      .then(() => {
-        setProviderModalOpen(false);
-        setMessage({ type: "ok", text: `Switched to ${PROVIDER_INFO[newProvider].name}` });
-      })
+      .then(() => setMessage({ type: "ok", text: `Switched to ${providerName}` }))
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to switch provider" }));
   };
 
-  const handleSaveApiKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!apiKeyName.trim()) return;
-    // If editing existing key and no new value, just update the name
-    const payload: Record<string, unknown> = { apiKeyName };
-    if (apiKey.trim()) {
-      payload.apiKey = apiKey;
+  const handleSaveApiKey = (keyName: string) => {
+    const value = apiKeyInputs[keyName]?.trim() || "";
+    if (!value) {
+      setMessage({ type: "error", text: "API key is empty." });
+      return;
     }
-    // If renaming, need to delete old key
-    if (editingApiKey && editingApiKey !== apiKeyName) {
-      payload.renameFrom = editingApiKey;
-    }
-    updateSettings(payload)
+    updateSettings({ apiKeyName: keyName, apiKey: value })
       .then(() => {
-        setApiKey("");
-        setApiKeyName("API_KEY");
-        setEditingApiKey(null);
-        setAddingApiKey(false);
-        setMessage({ type: "ok", text: "API key saved." });
+        setApiKeyInputs((prev) => ({ ...prev, [keyName]: "" }));
+        setMessage({ type: "ok", text: `${keyName} saved.` });
       })
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to save" }));
   };
@@ -238,20 +243,23 @@ export default function Settings() {
   const handleDeleteApiKey = (keyName: string) => {
     if (!confirm(`Are you sure you want to delete ${keyName}?`)) return;
     updateSettings({ deleteApiKey: true, apiKeyName: keyName })
-      .then(() => setMessage({ type: "ok", text: "API key deleted." }))
+      .then(() => {
+        setApiKeyInputs((prev) => ({ ...prev, [keyName]: "" }));
+        setMessage({ type: "ok", text: `${keyName} deleted.` });
+      })
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to delete" }));
   };
 
-  const handleSelectModel = (modelId: string) => {
-    updateSettings({ model: modelId })
+  const handleSelectModel = (provider: ProviderType, modelId: string) => {
+    updateSettings({ providerModel: { provider, model: modelId } })
       .then(() => {
-        setModelModalOpen(false);
+        setOpenModelDropdown(null);
         setMessage({ type: "ok", text: "Model updated." });
       })
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to save" }));
   };
 
-  const handleAddCustomModel = (e: React.FormEvent) => {
+  const handleAddCustomModel = (provider: ProviderType, e: React.FormEvent) => {
     e.preventDefault();
     if (!customModelId.trim() || !customModelName.trim()) return;
     setSaving(true);
@@ -260,7 +268,7 @@ export default function Settings() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        provider: state.provider,
+        provider,
         modelId: customModelId.trim(),
         modelName: customModelName.trim(),
         description: customModelDesc.trim() || undefined,
@@ -269,7 +277,14 @@ export default function Settings() {
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || "Failed to add model");
-        setState((prev) => ({ ...prev, availableModels: data.availableModels ?? prev.availableModels }));
+        setState((prev) => ({
+          ...prev,
+          allProviderModels: {
+            ...prev.allProviderModels,
+            [provider]: data.availableModels ?? prev.allProviderModels[provider],
+          },
+          availableModels: provider === prev.provider ? (data.availableModels ?? prev.availableModels) : prev.availableModels,
+        }));
         setCustomModelId("");
         setCustomModelName("");
         setCustomModelDesc("");
@@ -280,22 +295,31 @@ export default function Settings() {
       .finally(() => setSaving(false));
   };
 
-  const handleDeleteCustomModel = (modelId: string) => {
+  const handleDeleteCustomModel = (provider: ProviderType, modelId: string) => {
     if (!confirm(`Delete "${modelId}"?`)) return;
     setSaving(true);
     setMessage(null);
-    fetch(`/api/settings/custom-models/${state.provider}/${encodeURIComponent(modelId)}`, {
+    fetch(`/api/settings/custom-models/${provider}/${encodeURIComponent(modelId)}`, {
       method: "DELETE",
     })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || "Failed to delete");
-        setState((prev) => ({ ...prev, availableModels: data.availableModels ?? prev.availableModels }));
+        setState((prev) => ({
+          ...prev,
+          allProviderModels: {
+            ...prev.allProviderModels,
+            [provider]: data.availableModels ?? prev.allProviderModels[provider],
+          },
+          availableModels: provider === prev.provider ? (data.availableModels ?? prev.availableModels) : prev.availableModels,
+        }));
         setMessage({ type: "ok", text: "Model deleted." });
       })
       .catch((err) => setMessage({ type: "error", text: err?.message || "Failed to delete" }))
       .finally(() => setSaving(false));
   };
+
+  // --- Persona handlers ---
 
   const handlePersonasSave = (): Promise<boolean> => {
     setPersonasSaving(true);
@@ -352,7 +376,7 @@ export default function Settings() {
         if (!res.ok) throw new Error(data?.error || "Failed to add persona");
         setPersonasData(data);
         setPersonasMessage({ type: "ok", text: "Persona added!" });
-        loadLibrary(); // Refresh library to update isActive
+        loadLibrary();
       })
       .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to add persona" }))
       .finally(() => setPersonasSaving(false));
@@ -367,7 +391,7 @@ export default function Settings() {
         if (!res.ok) throw new Error(data?.error || "Failed to remove persona");
         setPersonasData(data);
         setPersonasMessage({ type: "ok", text: "Persona removed." });
-        loadLibrary(); // Refresh library to update isActive
+        loadLibrary();
       })
       .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to remove persona" }))
       .finally(() => setPersonasSaving(false));
@@ -377,15 +401,14 @@ export default function Settings() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (editingLibraryPersona) setEditingLibraryPersona(null);
-        else if (modalPersonaIndex !== null) setModalPersonaIndex(null);
-        else if (libraryModalOpen) setLibraryModalOpen(false);
-        else if (modelModalOpen) setModelModalOpen(false);
-        else if (providerModalOpen) setProviderModalOpen(false);
+        else if (openModelDropdown) setOpenModelDropdown(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [modalPersonaIndex, modelModalOpen, providerModalOpen, libraryModalOpen, editingLibraryPersona]);
+  }, [openModelDropdown, editingLibraryPersona]);
+
+  const apiKeyEntries = new Map(state.apiKeys.map((entry) => [entry.name, entry]));
 
   if (loading) {
     return (
@@ -398,690 +421,440 @@ export default function Settings() {
 
   return (
     <div className="animate-fade-in">
-      <h1 className="font-display text-2xl font-semibold mb-8">Settings</h1>
+      <h1 className="font-display text-2xl font-semibold mb-6">Settings</h1>
 
-      {/* API Keys Section */}
-      <section className="mb-8">
-        <h2 className="font-display text-lg font-semibold mb-4">API Keys</h2>
-        <p className="text-sm text-secondary mb-4">
-          Stored in <code className="font-mono text-xs bg-border-light px-1.5 py-0.5 rounded">server/data/settings.json</code>.
+      {/* Tab Navigation */}
+      <nav className="flex gap-1 mb-8 border-b border-border-light">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
+              activeTab === tab.id
+                ? "text-primary"
+                : "text-muted hover:text-secondary"
+            }`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <span className="absolute left-0 right-0 bottom-0 h-[2px] bg-primary rounded-full" />
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* Providers Tab */}
+      {activeTab === "providers" && (
+      <section>
+        <h2 className="font-display text-lg font-semibold mb-2">AI Providers</h2>
+        <p className="text-sm text-secondary mb-5">
+          Configure your LLM providers. Select one as the active provider for AI-generated comments.
         </p>
-        <div className="space-y-2">
-          {state.apiKeys.map((keyEntry) => (
-            <div key={keyEntry.name}>
-              {editingApiKey === keyEntry.name ? (
-                <form onSubmit={handleSaveApiKey} className="p-4 rounded-lg border border-accent/30 bg-accent/5 space-y-3">
-                  <div className="grid grid-cols-1 gap-3">
-                    <label className="block">
-                      <span className="text-xs text-secondary block mb-1">Key Name (JSON key)</span>
-                      <input
-                        type="text"
-                        className="input-minimal w-full font-mono text-sm"
-                        value={apiKeyName}
-                        onChange={(e) => setApiKeyName(e.target.value)}
-                        placeholder="API_KEY"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs text-secondary block mb-1">API Key Value</span>
+
+        <div className="space-y-4">
+          {PROVIDERS.map((providerInfo) => {
+            const pid = providerInfo.id;
+            const isActive = state.provider === pid;
+            const savedKey = apiKeyEntries.get(providerInfo.keyName);
+            const hasKey = !!savedKey;
+            const models = state.allProviderModels[pid] || [];
+            const selectedModelId = state.providerModels[pid] || "";
+            const selectedModel = models.find((m) => m.id === selectedModelId);
+            const inputValue = apiKeyInputs[providerInfo.keyName] || "";
+            const isModelOpen = openModelDropdown === pid;
+
+            return (
+              <div
+                key={pid}
+                className={`rounded-xl border transition-all ${
+                  isActive
+                    ? "border-accent/40 shadow-sm"
+                    : "border-border-light"
+                }`}
+              >
+                {/* Card Header - click to select provider */}
+                <div
+                  className={`p-4 flex items-center gap-3 cursor-pointer rounded-t-xl transition-colors ${
+                    isActive ? "bg-accent/5" : "bg-surface hover:bg-surface/80"
+                  }`}
+                  onClick={() => {
+                    if (!isActive && hasKey) {
+                      handleSelectProvider(pid);
+                    } else if (!isActive && !hasKey) {
+                      setMessage({ type: "error", text: `Set ${providerInfo.keyName} first to use ${providerInfo.name}.` });
+                    }
+                  }}
+                >
+                  {/* Radio indicator */}
+                  <span
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                      isActive ? "border-accent" : "border-border-dark"
+                    }`}
+                  >
+                    {isActive && <span className="w-2.5 h-2.5 rounded-full bg-accent" />}
+                  </span>
+
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-sm">{providerInfo.name}</span>
+                    <span className="text-xs text-muted ml-2">{providerInfo.description}</span>
+                  </div>
+
+                  {/* Status badge */}
+                  {isActive && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-accent/15 text-accent font-medium">
+                      Active
+                    </span>
+                  )}
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${
+                      hasKey
+                        ? "bg-green-100 text-green-700"
+                        : "bg-orange-100 text-orange-600"
+                    }`}
+                  >
+                    {hasKey ? "Connected" : "No API key"}
+                  </span>
+                </div>
+
+                {/* Card Body */}
+                <div className="px-4 pb-4 space-y-4 border-t border-border-light/50">
+                  {/* API Key */}
+                  <div className="pt-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium text-secondary">API Key</span>
+                      {savedKey && (
+                        <span className="text-xs text-muted font-mono">{savedKey.masked}</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
                       <input
                         type="password"
-                        className="input-minimal w-full"
-                        placeholder="Enter new API key (leave empty to keep current)"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
+                        className="input-minimal flex-1"
+                        placeholder={hasKey ? "Enter new key to replace" : `Enter ${providerInfo.keyName}`}
+                        value={inputValue}
+                        onChange={(e) =>
+                          setApiKeyInputs((prev) => ({ ...prev, [providerInfo.keyName]: e.target.value }))
+                        }
                         autoComplete="off"
-                        autoFocus
                       />
-                      <span className="text-xs text-muted mt-1 block">Current: {keyEntry.masked}</span>
-                    </label>
-                  </div>
-                  <div className="flex gap-2">
-                    <button type="submit" className="btn-primary text-sm" disabled={saving || !apiKeyName.trim()}>
-                      {saving ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary text-sm"
-                      onClick={() => { setEditingApiKey(null); setApiKey(""); setApiKeyName("API_KEY"); }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="flex items-center gap-3 p-3 rounded-lg border border-border-light bg-surface">
-                  <code className="font-mono text-xs text-accent shrink-0">{keyEntry.name}</code>
-                  <code className="flex-1 font-mono text-sm text-secondary truncate">{keyEntry.masked}</code>
-                  <button
-                    type="button"
-                    className="text-sm text-secondary hover:text-primary shrink-0"
-                    onClick={() => { setEditingApiKey(keyEntry.name); setApiKeyName(keyEntry.name); }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="text-sm text-accent hover:text-accent/80 shrink-0"
-                    onClick={() => handleDeleteApiKey(keyEntry.name)}
-                    disabled={saving}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Add new API key */}
-          {addingApiKey ? (
-            <form onSubmit={handleSaveApiKey} className="p-4 rounded-lg border border-dashed border-accent/30 bg-accent/5 space-y-3">
-              <div className="grid grid-cols-1 gap-3">
-                <label className="block">
-                  <span className="text-xs text-secondary block mb-1">Key Name (JSON key)</span>
-                  <input
-                    type="text"
-                    className="input-minimal w-full font-mono text-sm"
-                    value={apiKeyName}
-                    onChange={(e) => setApiKeyName(e.target.value)}
-                    placeholder="API_KEY"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-secondary block mb-1">API Key Value</span>
-                  <input
-                    type="password"
-                    className="input-minimal w-full"
-                    placeholder="Enter API key"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    autoComplete="off"
-                    autoFocus
-                  />
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <button type="submit" className="btn-primary text-sm" disabled={saving || !apiKey.trim() || !apiKeyName.trim()}>
-                  {saving ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary text-sm"
-                  onClick={() => { setAddingApiKey(false); setApiKey(""); setApiKeyName("API_KEY"); }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : (
-            <button
-              type="button"
-              className="w-full p-3 rounded-lg border border-dashed border-border-light text-sm text-secondary hover:border-border-dark hover:text-primary transition-colors"
-              onClick={() => setAddingApiKey(true)}
-            >
-              + Add API Key
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* Provider Section */}
-      <section className="mb-8">
-        <h2 className="font-display text-lg font-semibold mb-4">AI Provider</h2>
-        <p className="text-sm text-secondary mb-4">
-          Choose your LLM provider. Make sure you have the corresponding API key configured.
-        </p>
-        <div className="relative">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between gap-2 p-3 rounded-lg border border-border-light bg-surface hover:border-border-dark transition-colors text-left"
-            onClick={() => setProviderModalOpen(!providerModalOpen)}
-          >
-            <div>
-              <span className="font-medium text-sm block">
-                {PROVIDER_INFO[state.provider]?.name || state.provider}
-              </span>
-              <span className="text-xs text-muted">
-                Requires {PROVIDER_INFO[state.provider]?.keyName}
-              </span>
-            </div>
-            <span className={`text-secondary transition-transform ${providerModalOpen ? "rotate-180" : ""}`}>▼</span>
-          </button>
-
-          {/* Provider Dropdown */}
-          {providerModalOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setProviderModalOpen(false)}
-              />
-              <div
-                className="absolute top-full left-0 right-0 z-50 mt-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80"
-                style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
-              >
-                <div className="p-2">
-                  {state.providers.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      className={`w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all ${
-                        state.provider === p
-                          ? "bg-accent/15 border border-accent/30"
-                          : "hover:bg-white/50 border border-transparent"
-                      }`}
-                      onClick={() => handleSelectProvider(p)}
-                      disabled={saving}
-                    >
-                      <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        state.provider === p ? "border-accent" : "border-border-dark"
-                      }`}>
-                        {state.provider === p && <span className="w-2 h-2 rounded-full bg-accent" />}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium text-sm block">{PROVIDER_INFO[p]?.name}</span>
-                        <span className="text-xs text-muted">Requires {PROVIDER_INFO[p]?.keyName}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* Model Section */}
-      <section className="mb-8">
-        <h2 className="font-display text-lg font-semibold mb-4">Model</h2>
-        <p className="text-sm text-secondary mb-4">
-          Available models for {PROVIDER_INFO[state.provider]?.name || state.provider}.
-        </p>
-        <div className="relative">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between gap-2 p-3 rounded-lg border border-border-light bg-surface hover:border-border-dark transition-colors text-left"
-            onClick={() => setModelModalOpen(!modelModalOpen)}
-          >
-            <div>
-              <span className="font-medium text-sm block">
-                {state.availableModels.find((m) => m.id === state.model)?.name || state.model}
-              </span>
-              <span className="text-xs text-muted">
-                {state.availableModels.find((m) => m.id === state.model)?.description}
-              </span>
-            </div>
-            <span className={`text-secondary transition-transform ${modelModalOpen ? "rotate-180" : ""}`}>▼</span>
-          </button>
-
-          {/* Model Dropdown - Glassmorphism */}
-          {modelModalOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setModelModalOpen(false)}
-              />
-              <div
-                className="absolute top-full left-0 right-0 z-50 mt-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80"
-                style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
-              >
-                <div className="p-2 max-h-[50vh] overflow-y-auto">
-                  {state.availableModels.map((m) => (
-                    <div key={m.id} className="flex items-start gap-2">
                       <button
                         type="button"
-                        className={`flex-1 flex items-start gap-3 p-3 rounded-xl text-left transition-all ${
-                          state.model === m.id
-                            ? "bg-accent/15 border border-accent/30"
-                            : "hover:bg-white/50 border border-transparent"
-                        }`}
-                        onClick={() => handleSelectModel(m.id)}
-                        disabled={saving}
+                        className="btn-primary text-sm"
+                        disabled={saving || !inputValue.trim()}
+                        onClick={() => handleSaveApiKey(providerInfo.keyName)}
                       >
-                        <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                          state.model === m.id ? "border-accent" : "border-border-dark"
-                        }`}>
-                          {state.model === m.id && <span className="w-2 h-2 rounded-full bg-accent" />}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-sm">{m.name}</span>
-                            {m.latency && (
-                              <span className="text-xs text-muted shrink-0">{m.latency}</span>
-                            )}
-                          </div>
-                          {m.description && (
-                            <p className="text-xs text-secondary mt-0.5">{m.description}</p>
-                          )}
-                          {(m.inputPrice || m.outputPrice || m.contextWindow || m.maxOutput) && (
-                            <div className="flex gap-3 mt-1 text-xs text-muted">
-                              {m.inputPrice && m.outputPrice && (
-                                <span>{m.inputPrice} in / {m.outputPrice} out</span>
-                              )}
-                              {m.contextWindow && <span>Context: {m.contextWindow}</span>}
-                              {m.maxOutput && <span>Output: {m.maxOutput}</span>}
-                            </div>
-                          )}
-                        </div>
+                        {saving ? "..." : "Save"}
                       </button>
-                      {m.isCustom && (
+                      {savedKey && (
                         <button
                           type="button"
-                          className="mt-3 text-xs text-red-500 hover:text-red-700 p-1"
-                          onClick={() => handleDeleteCustomModel(m.id)}
+                          className="btn-secondary text-sm"
+                          onClick={() => handleDeleteApiKey(providerInfo.keyName)}
                           disabled={saving}
-                          title="Delete model"
                         >
-                          ×
+                          Clear
                         </button>
                       )}
                     </div>
-                  ))}
+                    {!hasKey && (
+                      <p className="text-xs text-accent mt-1.5">
+                        API key is required to use this provider.
+                      </p>
+                    )}
+                  </div>
 
-                  {/* Add New Model Version */}
-                  <div className="mt-2 pt-2 border-t border-white/30">
-                    {addingCustomModel ? (
-                      <form onSubmit={handleAddCustomModel} className="p-3 space-y-2">
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Model ID (exact API name)</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm font-mono"
-                            value={customModelId}
-                            onChange={(e) => setCustomModelId(e.target.value)}
-                            placeholder="e.g., gpt-5.3"
-                            autoFocus
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Display Name</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={customModelName}
-                            onChange={(e) => setCustomModelName(e.target.value)}
-                            placeholder="e.g., GPT-5.3"
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Description (optional)</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={customModelDesc}
-                            onChange={(e) => setCustomModelDesc(e.target.value)}
-                            placeholder="e.g., $2.50/MTok in, $10/MTok out"
-                          />
-                        </label>
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            type="submit"
-                            className="btn-primary text-xs"
-                            disabled={saving || !customModelId.trim() || !customModelName.trim()}
-                          >
-                            {saving ? "Adding..." : "Add"}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary text-xs"
-                            onClick={() => {
-                              setAddingCustomModel(false);
-                              setCustomModelId("");
-                              setCustomModelName("");
-                              setCustomModelDesc("");
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
+                  {/* Model Selector */}
+                  <div>
+                    <span className="text-xs font-medium text-secondary block mb-1.5">Model</span>
+                    <div className="relative">
                       <button
                         type="button"
-                        className="w-full p-3 text-sm text-secondary hover:text-primary text-left"
-                        onClick={() => setAddingCustomModel(true)}
+                        className="w-full flex items-center justify-between gap-2 p-2.5 rounded-lg border border-border-light bg-white hover:border-border-dark transition-colors text-left text-sm"
+                        onClick={() => setOpenModelDropdown(isModelOpen ? null : pid)}
                       >
-                        + Add New Model Version
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium block truncate">
+                            {selectedModel?.name || selectedModelId || "Select a model"}
+                          </span>
+                          {selectedModel?.description && (
+                            <span className="text-xs text-muted block truncate">{selectedModel.description}</span>
+                          )}
+                        </div>
+                        <span className={`text-secondary text-xs transition-transform ${isModelOpen ? "rotate-180" : ""}`}>▼</span>
                       </button>
-                    )}
+
+                      {/* Model Dropdown */}
+                      {isModelOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setOpenModelDropdown(null)}
+                          />
+                          <div
+                            className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/90"
+                            style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
+                          >
+                            <div className="p-1.5 max-h-[40vh] overflow-y-auto">
+                              {models.map((m) => (
+                                <div key={m.id} className="flex items-start gap-1">
+                                  <button
+                                    type="button"
+                                    className={`flex-1 flex items-start gap-2.5 p-2.5 rounded-lg text-left transition-all text-sm ${
+                                      selectedModelId === m.id
+                                        ? "bg-accent/15 border border-accent/30"
+                                        : "hover:bg-white/60 border border-transparent"
+                                    }`}
+                                    onClick={() => handleSelectModel(pid, m.id)}
+                                    disabled={saving}
+                                  >
+                                    <span className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                      selectedModelId === m.id ? "border-accent" : "border-border-dark"
+                                    }`}>
+                                      {selectedModelId === m.id && <span className="w-1.5 h-1.5 rounded-full bg-accent" />}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-medium">{m.name}</span>
+                                        {m.latency && <span className="text-xs text-muted shrink-0">{m.latency}</span>}
+                                      </div>
+                                      {m.description && <p className="text-xs text-secondary mt-0.5">{m.description}</p>}
+                                      {(m.inputPrice || m.outputPrice) && (
+                                        <div className="flex gap-3 mt-0.5 text-xs text-muted">
+                                          {m.inputPrice && m.outputPrice && (
+                                            <span>{m.inputPrice} in / {m.outputPrice} out</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </button>
+                                  {m.isCustom && (
+                                    <button
+                                      type="button"
+                                      className="mt-2.5 text-xs text-red-500 hover:text-red-700 p-1"
+                                      onClick={() => handleDeleteCustomModel(pid, m.id)}
+                                      disabled={saving}
+                                      title="Delete model"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+
+                              {/* Add Custom Model */}
+                              <div className="mt-1 pt-1 border-t border-white/30">
+                                {addingCustomModel && openModelDropdown === pid ? (
+                                  <form onSubmit={(e) => handleAddCustomModel(pid, e)} className="p-2.5 space-y-2">
+                                    <label className="block">
+                                      <span className="text-xs text-secondary block mb-1">Model ID (exact API name)</span>
+                                      <input
+                                        type="text"
+                                        className="input-minimal w-full text-sm font-mono"
+                                        value={customModelId}
+                                        onChange={(e) => setCustomModelId(e.target.value)}
+                                        placeholder="e.g., gpt-5.3"
+                                        autoFocus
+                                      />
+                                    </label>
+                                    <label className="block">
+                                      <span className="text-xs text-secondary block mb-1">Display Name</span>
+                                      <input
+                                        type="text"
+                                        className="input-minimal w-full text-sm"
+                                        value={customModelName}
+                                        onChange={(e) => setCustomModelName(e.target.value)}
+                                        placeholder="e.g., GPT-5.3"
+                                      />
+                                    </label>
+                                    <label className="block">
+                                      <span className="text-xs text-secondary block mb-1">Description (optional)</span>
+                                      <input
+                                        type="text"
+                                        className="input-minimal w-full text-sm"
+                                        value={customModelDesc}
+                                        onChange={(e) => setCustomModelDesc(e.target.value)}
+                                        placeholder="e.g., Latest model"
+                                      />
+                                    </label>
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        type="submit"
+                                        className="btn-primary text-xs"
+                                        disabled={saving || !customModelId.trim() || !customModelName.trim()}
+                                      >
+                                        {saving ? "Adding..." : "Add"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary text-xs"
+                                        onClick={() => {
+                                          setAddingCustomModel(false);
+                                          setCustomModelId("");
+                                          setCustomModelName("");
+                                          setCustomModelDesc("");
+                                        }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </form>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="w-full p-2.5 text-xs text-secondary hover:text-primary text-left"
+                                    onClick={() => setAddingCustomModel(true)}
+                                  >
+                                    + Add Custom Model
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </>
-          )}
+            );
+          })}
         </div>
-      </section>
 
       {message && (
-        <p className={`text-sm mb-8 ${message.type === "ok" ? "text-secondary" : "text-accent"}`}>
+        <p className={`text-sm mt-6 ${message.type === "ok" ? "text-secondary" : "text-accent"}`}>
           {message.text}
         </p>
       )}
+      </section>
+      )}
 
-      {/* Personas Section */}
+      {/* Personas Tab */}
+      {activeTab === "personas" && (
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl font-semibold">Personas</h2>
-          <button
-            type="button"
-            className="btn-secondary text-sm"
-            onClick={() => {
-              loadLibrary();
-              setLibraryModalOpen(true);
-            }}
-          >
-            Edit Persona List
-          </button>
-        </div>
+        <h2 className="font-display text-xl font-semibold mb-2">Personas</h2>
         <p className="text-sm text-secondary mb-6">
-          Your active AI commenters. Click a card to view details and edit.
+          Manage your AI commenters. Click a card to view details and edit.
         </p>
 
-        {personasLoading ? (
+        {personasLoading || libraryLoading ? (
           <p className="text-muted text-sm">Loading personas...</p>
         ) : (
           <>
-            {/* Active Personas Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {personasData.personas.map((persona, index) => (
-                <button
-                  key={persona.id}
-                  type="button"
-                  className="p-4 rounded-xl border border-border-light bg-surface text-left transition-all hover:shadow-md hover:border-border-dark focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 relative overflow-hidden"
-                  onClick={() => setModalPersonaIndex(index)}
-                >
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
-                    style={{ backgroundColor: persona.color }}
-                  />
-                  <div className="mb-2">
-                    <PersonaIcon emoji={persona.emoji} color={persona.color} size={28} />
-                  </div>
-                  <span className="font-display font-semibold block truncate text-sm" style={{ color: persona.color }}>
-                    {persona.name}
-                  </span>
-                  <span className="text-muted text-xs block truncate">{persona.role}</span>
-                </button>
-              ))}
-            </div>
+            {/* Active Personas Section */}
+            {libraryPersonas.filter(p => p.isActive).length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  Active Personas ({libraryPersonas.filter(p => p.isActive).length})
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                  {libraryPersonas.filter(p => p.isActive).map((persona) => {
+                    const index = personasData.personas.findIndex(p => p.id === persona.id);
+                    return (
+                      <div
+                        key={persona.id}
+                        className="p-4 rounded-xl border border-border-light bg-surface transition-all hover:shadow-md hover:border-border-dark relative overflow-hidden ring-2 ring-green-400/50 ring-offset-2"
+                      >
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                          style={{ backgroundColor: persona.color }}
+                        />
+                        <button
+                          type="button"
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center bg-red-100 text-red-600 hover:bg-red-200 transition-colors z-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemovePersona(persona.id);
+                          }}
+                          disabled={personasSaving}
+                          title="비활성화"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="w-full text-left"
+                          onClick={() => {
+                            setEditingLibraryPersona(persona);
+                            setEditingLibraryData({ ...persona });
+                          }}
+                        >
+                          <div className="mb-2">
+                            <PersonaIcon emoji={persona.emoji} color={persona.color} size={28} />
+                          </div>
+                          <span className="font-display font-semibold block truncate text-sm" style={{ color: persona.color }}>
+                            {persona.name}
+                          </span>
+                          <span className="text-muted text-xs block truncate">{persona.role}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Available Personas Section */}
+            {libraryPersonas.filter(p => !p.isActive).length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
+                  Available Personas ({libraryPersonas.filter(p => !p.isActive).length})
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                  {libraryPersonas.filter(p => !p.isActive).map((persona) => (
+                    <div
+                      key={persona.id}
+                      className="p-4 rounded-xl border border-border-light bg-surface transition-all hover:shadow-md hover:border-border-dark relative overflow-hidden"
+                    >
+                      <div
+                        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                        style={{ backgroundColor: persona.color }}
+                      />
+                      <button
+                        type="button"
+                        className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center bg-accent/20 text-accent hover:bg-accent/30 transition-colors z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddPersona(persona.id);
+                        }}
+                        disabled={personasSaving}
+                        title="활성화"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => {
+                          setEditingLibraryPersona(persona);
+                          setEditingLibraryData({ ...persona });
+                        }}
+                      >
+                        <div className="mb-2">
+                          <PersonaIcon emoji={persona.emoji} color={persona.color} size={28} />
+                        </div>
+                        <span className="font-display font-semibold block truncate text-sm" style={{ color: persona.color }}>
+                          {persona.name}
+                        </span>
+                        <span className="text-muted text-xs block truncate">{persona.role}</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {personasMessage && (
               <p className={`text-sm mt-4 ${personasMessage.type === "ok" ? "text-secondary" : "text-accent"}`}>
                 {personasMessage.text}
               </p>
-            )}
-
-            {/* Edit modal - Glassmorphism */}
-            {modalPersonaIndex !== null && personasData.personas[modalPersonaIndex] && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
-                onClick={(e) => e.target === e.currentTarget && setModalPersonaIndex(null)}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="modal-title"
-              >
-                <div
-                  className="rounded-2xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80 max-h-[90vh] w-full max-w-2xl flex flex-col"
-                  style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="p-4 border-b border-white/30 flex items-center justify-between shrink-0 rounded-t-2xl bg-white/40">
-                    <h3 id="modal-title" className="font-display text-lg font-semibold text-primary">
-                      Edit: {personasData.personas[modalPersonaIndex].name}
-                    </h3>
-                    <button
-                      type="button"
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-primary hover:bg-white/50 transition-colors"
-                      onClick={() => setModalPersonaIndex(null)}
-                      aria-label="Close"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="p-4 overflow-y-auto space-y-4">
-                    {/* Basic Info */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Basic Info</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Name</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={personasData.personas[modalPersonaIndex].name}
-                            onChange={(e) => updatePersona(modalPersonaIndex, "name", e.target.value)}
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Role (custom label)</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={personasData.personas[modalPersonaIndex].role}
-                            onChange={(e) => updatePersona(modalPersonaIndex, "role", e.target.value)}
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Style */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Style</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Emoji</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={personasData.personas[modalPersonaIndex].emoji}
-                            onChange={(e) => updatePersona(modalPersonaIndex, "emoji", e.target.value)}
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Color</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={personasData.personas[modalPersonaIndex].color}
-                            onChange={(e) => updatePersona(modalPersonaIndex, "color", e.target.value)}
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Background</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={personasData.personas[modalPersonaIndex].bgColor}
-                            onChange={(e) => updatePersona(modalPersonaIndex, "bgColor", e.target.value)}
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs text-secondary block mb-1">Border</span>
-                          <input
-                            type="text"
-                            className="input-minimal w-full text-sm"
-                            value={personasData.personas[modalPersonaIndex].borderColor}
-                            onChange={(e) => updatePersona(modalPersonaIndex, "borderColor", e.target.value)}
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Prompt */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Prompt</h4>
-                      <label className="block">
-                        <span className="text-xs text-secondary block mb-1">System Prompt ({personasData.personas[modalPersonaIndex].promptFile})</span>
-                        <textarea
-                          className="input-minimal w-full text-sm font-mono min-h-[280px]"
-                          value={personasData.personas[modalPersonaIndex].promptContent}
-                          onChange={(e) => updatePersona(modalPersonaIndex, "promptContent", e.target.value)}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  <div className="p-4 border-t border-white/30 flex gap-2 justify-end shrink-0 rounded-b-2xl bg-white/40">
-                    <button
-                      type="button"
-                      className="btn-secondary text-sm"
-                      onClick={() => setModalPersonaIndex(null)}
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-primary text-sm"
-                      disabled={personasSaving}
-                      onClick={() => {
-                        handlePersonasSave().then((ok) => ok && setModalPersonaIndex(null));
-                      }}
-                    >
-                      {personasSaving ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Library Modal */}
-            {libraryModalOpen && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
-                onClick={(e) => e.target === e.currentTarget && setLibraryModalOpen(false)}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="library-modal-title"
-              >
-                <div
-                  className="rounded-2xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80 max-h-[90vh] w-full max-w-4xl flex flex-col"
-                  style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="p-4 border-b border-white/30 flex items-center justify-between shrink-0 rounded-t-2xl bg-white/40">
-                    <h3 id="library-modal-title" className="font-display text-lg font-semibold text-primary">
-                      Edit Persona List
-                    </h3>
-                    <button
-                      type="button"
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-primary hover:bg-white/50 transition-colors"
-                      onClick={() => setLibraryModalOpen(false)}
-                      aria-label="Close"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="p-4 overflow-y-auto">
-                    {libraryLoading ? (
-                      <p className="text-muted text-sm text-center py-8">Loading library...</p>
-                    ) : (
-                      <>
-                        {/* Active Personas Section */}
-                        {libraryPersonas.filter(p => p.isActive).length > 0 && (
-                          <div className="mb-6">
-                            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                              Active Personas ({libraryPersonas.filter(p => p.isActive).length})
-                            </h4>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              {libraryPersonas.filter(p => p.isActive).map((persona) => (
-                                <div
-                                  key={persona.id}
-                                  className="p-4 rounded-xl border border-border-light bg-white transition-all hover:shadow-md cursor-pointer relative overflow-hidden ring-2 ring-green-400/50 ring-offset-2"
-                                  onClick={() => { setEditingLibraryPersona(persona); setEditingLibraryData({ ...persona }); }}
-                                >
-                                  <div
-                                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
-                                    style={{ backgroundColor: persona.color }}
-                                  />
-                                  <div className="flex items-start justify-between gap-2 mb-2">
-                                    <span className="text-2xl">{persona.emoji}</span>
-                                    <button
-                                      type="button"
-                                      className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemovePersona(persona.id);
-                                      }}
-                                      disabled={personasSaving}
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                  <span
-                                    className="font-display font-semibold block truncate"
-                                    style={{ color: persona.color }}
-                                  >
-                                    {persona.name}
-                                  </span>
-                                  <span className="text-muted text-xs block">{persona.role}</span>
-                                  <p className="text-xs text-secondary mt-2 line-clamp-2">
-                                    {persona.description}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Available Personas Section */}
-                        {libraryPersonas.filter(p => !p.isActive).length > 0 && (
-                          <div>
-                            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
-                              Available Personas ({libraryPersonas.filter(p => !p.isActive).length})
-                            </h4>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              {libraryPersonas.filter(p => !p.isActive).map((persona) => (
-                                <div
-                                  key={persona.id}
-                                  className="p-4 rounded-xl border border-border-light bg-white transition-all hover:shadow-md cursor-pointer relative overflow-hidden"
-                                  onClick={() => { setEditingLibraryPersona(persona); setEditingLibraryData({ ...persona }); }}
-                                >
-                                  <div
-                                    className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
-                                    style={{ backgroundColor: persona.color }}
-                                  />
-                                  <div className="flex items-start justify-between gap-2 mb-2">
-                                    <span className="text-2xl">{persona.emoji}</span>
-                                    <button
-                                      type="button"
-                                      className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent hover:bg-accent/30 transition-colors"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleAddPersona(persona.id);
-                                      }}
-                                      disabled={personasSaving}
-                                    >
-                                      + Add
-                                    </button>
-                                  </div>
-                                  <span
-                                    className="font-display font-semibold block truncate"
-                                    style={{ color: persona.color }}
-                                  >
-                                    {persona.name}
-                                  </span>
-                                  <span className="text-muted text-xs block">{persona.role}</span>
-                                  <p className="text-xs text-secondary mt-2 line-clamp-2">
-                                    {persona.description}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  <div className="p-4 border-t border-white/30 flex justify-end shrink-0 rounded-b-2xl bg-white/40">
-                    <button
-                      type="button"
-                      className="btn-secondary text-sm"
-                      onClick={() => setLibraryModalOpen(false)}
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              </div>
             )}
 
             {/* Library Persona Edit Modal */}
@@ -1229,13 +1002,13 @@ export default function Settings() {
                       >
                         Close
                       </button>
-                      {editingLibraryPersona.isActive && (
-                        <button
-                          type="button"
-                          className="btn-primary text-sm"
-                          disabled={personasSaving}
-                          onClick={() => {
-                            // Find the persona in personasData and update it
+                      <button
+                        type="button"
+                        className="btn-primary text-sm"
+                        disabled={personasSaving}
+                        onClick={() => {
+                          if (editingLibraryPersona.isActive) {
+                            // Update active persona
                             const idx = personasData.personas.findIndex(p => p.id === editingLibraryData.id);
                             if (idx !== -1) {
                               const updated = {
@@ -1271,11 +1044,16 @@ export default function Settings() {
                                 .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to save" }))
                                 .finally(() => setPersonasSaving(false));
                             }
-                          }}
-                        >
-                          {personasSaving ? "Saving..." : "Save"}
-                        </button>
-                      )}
+                          } else {
+                            // For available personas, we need to update the library file
+                            // For now, just reload the library to reflect any changes
+                            // TODO: Add API endpoint to update library personas
+                            setPersonasMessage({ type: "error", text: "Library personas cannot be edited directly. Add to active personas first." });
+                          }
+                        }}
+                      >
+                        {personasSaving ? "Saving..." : "Save"}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1284,9 +1062,11 @@ export default function Settings() {
           </>
         )}
       </section>
+      )}
 
-      {/* Data Storage Section */}
-      <section className="mt-8">
+      {/* Data Tab */}
+      {activeTab === "data" && (
+      <section>
         <h2 className="font-display text-lg font-semibold mb-4">Data Storage</h2>
         <p className="text-sm text-secondary mb-4">
           Posts and comments are stored locally in{" "}
@@ -1307,6 +1087,7 @@ export default function Settings() {
           Open Data Folder
         </button>
       </section>
+      )}
     </div>
   );
 }

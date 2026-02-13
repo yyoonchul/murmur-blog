@@ -4,11 +4,18 @@ import { marked } from "marked";
 import CommentCard from "../components/CommentCard";
 import CommentInput from "../components/CommentInput";
 import AiTypingIndicator from "../components/AiTypingIndicator";
-import { getPost, deletePost, addComment, getPersonas } from "../services/api";
+import { getPost, deletePost, addComment, getPersonas, getSettingsSummary } from "../services/api";
 import type { ServerComment } from "../services/api";
 import type { Post, Comment, PersonaInfo } from "../types";
 
 type PersonaMap = Map<string, PersonaInfo>;
+type ProviderType = "anthropic" | "openai" | "google";
+
+const PROVIDER_KEY_MAP: Record<ProviderType, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  google: "GOOGLE_API_KEY",
+};
 
 function transformComments(
   serverComments: ServerComment[],
@@ -48,6 +55,7 @@ export default function PostView() {
   const [personaMap, setPersonaMap] = useState<PersonaMap>(new Map());
   const [aiGenerating, setAiGenerating] = useState(false);
   const [generatingReplyFor, setGeneratingReplyFor] = useState<string | null>(null);
+  const [aiReplyWarning, setAiReplyWarning] = useState<string | null>(null);
 
   const justCreated = (location.state as { justCreated?: boolean })?.justCreated === true;
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -78,6 +86,31 @@ export default function PostView() {
       .catch(() => setError("Failed to load post."))
       .finally(() => setLoading(false));
   }, [id, personaMap]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSettingsSummary()
+      .then((data) => {
+        if (cancelled) return;
+        const requiredKey = PROVIDER_KEY_MAP[data.provider];
+        const hasKey = data.apiKeys.some((k) => k.name === requiredKey);
+        if (!hasKey) {
+          setAiReplyWarning(
+            `${requiredKey} is not configured, so AI replies are currently disabled.`
+          );
+        } else {
+          setAiReplyWarning(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAiReplyWarning("Could not verify API key status. AI replies may fail.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Re-fetch comments helper
   const refreshComments = useCallback(async () => {
@@ -145,6 +178,9 @@ export default function PostView() {
 
   const handleCommentSubmit = async (content: string) => {
     if (!post) return;
+    if (aiReplyWarning) {
+      alert(aiReplyWarning);
+    }
 
     const tempId = `temp-${Date.now()}`;
     const optimisticComment: Comment = {
@@ -176,6 +212,9 @@ export default function PostView() {
 
   const handleReplySubmit = async (parentId: string, content: string) => {
     if (!post) return;
+    if (aiReplyWarning) {
+      alert(aiReplyWarning);
+    }
 
     const tempId = `temp-${Date.now()}`;
     const optimisticReply: Comment = {
@@ -337,6 +376,9 @@ export default function PostView() {
         </div>
 
         {/* Comment Input */}
+        {aiReplyWarning && (
+          <p className="text-xs text-accent mb-3">{aiReplyWarning}</p>
+        )}
         <CommentInput
           onSubmit={handleCommentSubmit}
           placeholder="Write a comment..."

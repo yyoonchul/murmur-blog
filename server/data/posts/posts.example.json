@@ -1,0 +1,9 @@
+[
+  {
+    "id": "example-post-id-1",
+    "title": "Example Post Title",
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z",
+    "commentsFile": "example-post-id-1-comments.json"
+  }
+]

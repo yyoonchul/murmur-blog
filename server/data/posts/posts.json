@@ -1,30 +1,9 @@
 [
   {
-    "id": "05add204-0d7e-49d9-bd5b-3584e114d2e4",
-    "title": "나는 무엇을 만들고 싶은가",
-    "createdAt": "2026-02-07T06:28:41.421Z",
-    "updatedAt": "2026-02-07T06:28:41.421Z",
-    "commentsFile": "05add204-0d7e-49d9-bd5b-3584e114d2e4-comments.json"
-  },
-  {
-    "id": "20963254-6e39-4924-89e2-3ef343bacb1c",
-    "title": "나는 무엇을 만들고 싶은가",
-    "createdAt": "2026-02-07T06:04:20.823Z",
-    "updatedAt": "2026-02-07T06:04:20.823Z",
-    "commentsFile": "20963254-6e39-4924-89e2-3ef343bacb1c-comments.json"
-  },
-  {
-    "id": "4b927096-de4c-44e4-9685-0b601e88cd75",
-    "title": "나는 무엇을 만들고 싶은가",
-    "createdAt": "2026-02-07T05:40:19.009Z",
-    "updatedAt": "2026-02-07T05:40:19.009Z",
-    "commentsFile": "4b927096-de4c-44e4-9685-0b601e88cd75-comments.json"
-  },
-  {
-    "id": "1",
-    "title": "What I want to build",
+    "id": "example",
+    "title": "Hello, Monolog",
     "createdAt": "2024-01-15T10:00:00Z",
     "updatedAt": "2024-01-15T10:00:00Z",
-    "commentsFile": "1-comments.json"
+    "commentsFile": "example-comments.json"
   }
 ]
