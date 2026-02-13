@@ -41,24 +41,14 @@
       "promptFile": "suhyun-critic.md"
     },
     {
-      "id": "philosopher",
-      "name": "Sophia",
-      "role": "Philosopher",
-      "emoji": "🔭",
-      "color": "#8B5CF6",
-      "bgColor": "#F5F3FF",
-      "borderColor": "#DDD6FE",
-      "promptFile": "library/philosopher.md"
-    },
-    {
-      "id": "skeptic",
-      "name": "Thomas",
-      "role": "Skeptic",
-      "emoji": "🤔",
-      "color": "#EF4444",
+      "id": "doyun",
+      "name": "Dylan",
+      "role": "Contrarian",
+      "emoji": "⚡",
+      "color": "#DC2626",
       "bgColor": "#FEF2F2",
       "borderColor": "#FECACA",
-      "promptFile": "library/skeptic.md"
+      "promptFile": "doyun-contrarian.md"
     }
   ],
   "feedbackOrder": [
@@ -66,8 +56,7 @@
     "eunseo",
     "jihoon",
     "suhyun",
-    "philosopher",
-    "skeptic"
+    "doyun"
   ],
   "feedbackOrderReason": "Warm feedback first → neutral → challenging. The writer receives encouraging feedback first, then increasingly sharp perspectives."
 }

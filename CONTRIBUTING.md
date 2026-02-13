@@ -1,6 +1,6 @@
 # Contributing to Monolog
 
-Monolog에 기여해 주셔서 감사합니다! 이 문서는 프로젝트에 기여하기 위한 가이드라인을 제공합니다.
+Thank you for contributing to Monolog! This document provides guidelines for contributing to the project.
 
 ## Getting Started
 
@@ -17,14 +17,15 @@ cd monolog
 npm install
 ```
 
-### 3. Configure Environment
+### 3. Configure API Key
+
+Run the app and set up your API key in the Settings page:
 
 ```bash
-cp .env.example .env
-# Edit .env with your API key
+npm run dev
 ```
 
-또는 앱 실행 후 Settings 페이지에서 API 키를 설정할 수 있습니다.
+Then open http://localhost:3001 and go to **Settings** > **Providers** to add your API key.
 
 ### 4. Run Development Server
 
@@ -32,7 +33,7 @@ cp .env.example .env
 npm run dev
 ```
 
-http://localhost:3001 에서 앱이 실행됩니다.
+The app runs at http://localhost:3001.
 
 ## Project Structure
 
@@ -79,29 +80,29 @@ monolog/
 
 ## Code Style
 
-- **TypeScript**: 모든 코드는 TypeScript로 작성
-- **ES Modules**: `import`/`export` 사용
-- **Functional Components**: React 함수형 컴포넌트 사용
-- 기존 코드 패턴을 따라주세요
+- **TypeScript**: All code should be written in TypeScript
+- **ES Modules**: Use `import`/`export`
+- **Functional Components**: Use React functional components
+- Follow existing code patterns
 
 ### Type Checking
 
 ```bash
-npm run build  # TypeScript 에러 확인
+npm run build  # Check for TypeScript errors
 ```
 
 ## Pull Request Process
 
-1. Feature branch 생성: `git checkout -b feature/your-feature-name`
-2. 변경 사항 커밋
-3. 빌드 확인: `npm run build`
-4. Pull Request 생성
-5. 명확한 설명 작성
+1. Create a feature branch: `git checkout -b feature/your-feature-name`
+2. Commit your changes
+3. Verify build: `npm run build`
+4. Create a Pull Request
+5. Write a clear description
 
 ## Adding a New Persona
 
-1. `server/data/persona/library/`에 Markdown 파일 생성
-2. `server/data/persona/library/library.json`에 메타데이터 추가
+1. Create a Markdown file in `server/data/persona/library/`
+2. Add metadata to `server/data/persona/library/library.json`
 
 ### Persona Prompt Format
 
@@ -129,8 +130,8 @@ You are **Name**, a [role description]. You approach writing with [perspective].
 
 ## Adding a New LLM Provider
 
-1. `server/lib/llm/`에 새 파일 생성 (예: `newprovider.ts`)
-2. `LLMProvider` 인터페이스 구현:
+1. Create a new file in `server/lib/llm/` (e.g., `newprovider.ts`)
+2. Implement the `LLMProvider` interface:
 
 ```typescript
 import type { LLMProvider, LLMOptions, LLMMessage, LLMModelInfo } from "./types.js";
@@ -145,9 +146,9 @@ export class NewProvider implements LLMProvider {
 }
 ```
 
-3. `server/lib/llm/index.ts`에 등록
-4. Settings에 API 키 처리 추가
+3. Register it in `server/lib/llm/index.ts`
+4. Add API key handling in Settings
 
 ## Questions?
 
-이슈를 열어 질문하거나 토론해 주세요.
+Please open an issue to ask questions or start a discussion.
