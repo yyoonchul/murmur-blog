@@ -92,7 +92,7 @@ Open http://localhost:3001 in your browser.
 That's it. Now when you write a post, AI personas will automatically leave the first comments.
 
 <p align="center">
-  <img src="public/monolog_settings.gif" alt="Setting up API key in the Settings page" width="100%">
+  <img src="public/monolog_setting.gif" alt="Setting up API key in the Settings page" width="100%">
 </p>
 
 > **Note**: API keys are stored locally in `server/data/settings.json` and excluded from commits via `.gitignore`.
