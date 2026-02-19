@@ -13,7 +13,9 @@ The disappointment is one thing, but **without feedback, your writing never impr
 Monolog solves this. When you publish a post, **AI readers with different perspectives** read your writing and leave comments. 
 They become the first readers of your work.
 
-![Writing a post and receiving AI comments](public/monolog_posting.gif)
+<p align="center">
+  <img src="public/monolog_posting.gif" alt="Writing a post and receiving AI comments" width="100%">
+</p>
 
 ## How It Works
 
@@ -22,7 +24,9 @@ They become the first readers of your work.
 3. **Comments arrive** — From warm encouragement to sharp critique, diverse feedback appears
 4. **Conversation continues** — Reply to comments and AI responds back, creating a real dialogue
 
-![Replying to AI comments and continuing the conversation](public/monolog_reply.gif)
+<p align="center">
+  <img src="public/monolog_reply.gif" alt="Replying to AI comments and continuing the conversation" width="100%">
+</p>
 
 ## Your First Readers
 
@@ -87,7 +91,9 @@ Open http://localhost:3001 in your browser.
 
 That's it. Now when you write a post, AI personas will automatically leave the first comments.
 
-![Setting up API key in the Settings page](public/monolog_settings.gif)
+<p align="center">
+  <img src="public/monolog_settings.gif" alt="Setting up API key in the Settings page" width="100%">
+</p>
 
 > **Note**: API keys are stored locally in `server/data/settings.json` and excluded from commits via `.gitignore`.
 
