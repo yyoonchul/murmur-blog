@@ -1045,10 +1045,29 @@ export default function Settings() {
                                 .finally(() => setPersonasSaving(false));
                             }
                           } else {
-                            // For available personas, we need to update the library file
-                            // For now, just reload the library to reflect any changes
-                            // TODO: Add API endpoint to update library personas
-                            setPersonasMessage({ type: "error", text: "Library personas cannot be edited directly. Add to active personas first." });
+                            setPersonasSaving(true);
+                            fetch(`/api/personas/library/${editingLibraryData.id}`, {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                name: editingLibraryData.name,
+                                role: editingLibraryData.role,
+                                emoji: editingLibraryData.emoji,
+                                color: editingLibraryData.color,
+                                bgColor: editingLibraryData.bgColor,
+                                borderColor: editingLibraryData.borderColor,
+                                promptContent: editingLibraryData.promptContent,
+                              }),
+                            })
+                              .then(async (res) => {
+                                const data = await res.json().catch(() => ({}));
+                                if (!res.ok) throw new Error(data?.error || "Failed to save");
+                                setPersonasMessage({ type: "ok", text: "Persona saved!" });
+                                loadLibrary();
+                                setEditingLibraryPersona(null);
+                              })
+                              .catch((err) => setPersonasMessage({ type: "error", text: err?.message || "Failed to save" }))
+                              .finally(() => setPersonasSaving(false));
                           }
                         }}
                       >

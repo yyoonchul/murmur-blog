@@ -147,17 +147,19 @@ export function readLibrary(): PersonaLibrary {
 }
 
 /**
- * Get library with active status and prompt content
+ * Get library with active status and prompt content.
+ * For active personas, overlay any edits from personas.json on top of library defaults.
  */
 export function readLibraryWithStatus(): { presets: LibraryPersonaWithStatus[] } {
   const library = readLibrary();
   const active = readPersonas();
-  const activeIds = new Set(active.personas.map((p) => p.id));
+  const activeMap = new Map(active.personas.map((p) => [p.id, p]));
 
   return {
     presets: library.presets.map((p) => {
+      const activePersona = activeMap.get(p.id);
       let promptContent = "";
-      const promptPath = resolvePromptPath(p.promptFile);
+      const promptPath = resolvePromptPath(activePersona?.promptFile ?? p.promptFile);
       if (promptPath) {
         try {
           promptContent = fs.readFileSync(promptPath, "utf-8");
@@ -165,9 +167,23 @@ export function readLibraryWithStatus(): { presets: LibraryPersonaWithStatus[] }
           promptContent = "";
         }
       }
+      if (activePersona) {
+        return {
+          ...p,
+          name: activePersona.name,
+          role: activePersona.role,
+          emoji: activePersona.emoji,
+          color: activePersona.color,
+          bgColor: activePersona.bgColor,
+          borderColor: activePersona.borderColor,
+          promptFile: activePersona.promptFile,
+          isActive: true,
+          promptContent: activePersona.promptContent || promptContent,
+        };
+      }
       return {
         ...p,
-        isActive: activeIds.has(p.id),
+        isActive: false,
         promptContent,
       };
     }),
@@ -216,6 +232,48 @@ export function addPersonaFromLibrary(personaId: string): PersonasData | null {
   writePersonas(data);
 
   return readPersonas();
+}
+
+/**
+ * Update a library preset's metadata and prompt content
+ */
+export function updateLibraryPersona(
+  personaId: string,
+  updates: { name?: string; role?: string; emoji?: string; color?: string; bgColor?: string; borderColor?: string; promptContent?: string }
+): LibraryPersonaWithStatus | null {
+  const library = readLibrary();
+  const idx = library.presets.findIndex((p) => p.id === personaId);
+  if (idx === -1) return null;
+
+  const preset = library.presets[idx];
+  if (updates.name !== undefined) preset.name = updates.name;
+  if (updates.role !== undefined) preset.role = updates.role;
+  if (updates.emoji !== undefined) preset.emoji = updates.emoji;
+  if (updates.color !== undefined) preset.color = updates.color;
+  if (updates.bgColor !== undefined) preset.bgColor = updates.bgColor;
+  if (updates.borderColor !== undefined) preset.borderColor = updates.borderColor;
+
+  if (typeof updates.promptContent === "string") {
+    const promptPath = resolvePromptPath(preset.promptFile);
+    if (promptPath) {
+      fs.writeFileSync(promptPath, updates.promptContent, "utf-8");
+    }
+  }
+
+  fs.writeFileSync(LIBRARY_JSON, JSON.stringify(library, null, 2), "utf-8");
+
+  let promptContent = "";
+  const promptPath = resolvePromptPath(preset.promptFile);
+  if (promptPath) {
+    try { promptContent = fs.readFileSync(promptPath, "utf-8"); } catch { promptContent = ""; }
+  }
+
+  const active = readPersonas();
+  return {
+    ...preset,
+    isActive: active.personas.some((p) => p.id === personaId),
+    promptContent,
+  };
 }
 
 /**

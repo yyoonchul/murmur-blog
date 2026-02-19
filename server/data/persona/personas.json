@@ -31,32 +31,43 @@
       "promptFile": "jihoon-mentor.md"
     },
     {
-      "id": "suhyun",
-      "name": "Sam",
-      "role": "Logic Critic",
-      "emoji": "🔬",
-      "color": "#2563EB",
-      "bgColor": "#EFF6FF",
-      "borderColor": "#BFDBFE",
-      "promptFile": "suhyun-critic.md"
+      "id": "philosopher",
+      "name": "Sophia",
+      "role": "Philosopher",
+      "emoji": "🔭",
+      "color": "#8B5CF6",
+      "bgColor": "#F5F3FF",
+      "borderColor": "#DDD6FE",
+      "promptFile": "library/philosopher.md"
     },
     {
-      "id": "doyun",
-      "name": "Dylan",
-      "role": "Contrarian",
-      "emoji": "⚡",
-      "color": "#DC2626",
-      "bgColor": "#FEF2F2",
-      "borderColor": "#FECACA",
-      "promptFile": "doyun-contrarian.md"
+      "id": "tech-expert",
+      "name": "Alex",
+      "role": "Tech Expert",
+      "emoji": "💻",
+      "color": "#0891B2",
+      "bgColor": "#ECFEFF",
+      "borderColor": "#A5F3FC",
+      "promptFile": "library/tech-expert.md"
+    },
+    {
+      "id": "coach",
+      "name": "Yoonchul",
+      "role": "Coach",
+      "emoji": "💪",
+      "color": "#059669",
+      "bgColor": "#ECFDF5",
+      "borderColor": "#6EE7B7",
+      "promptFile": "library/coach.md"
     }
   ],
   "feedbackOrder": [
     "mina",
     "eunseo",
     "jihoon",
-    "suhyun",
-    "doyun"
+    "philosopher",
+    "tech-expert",
+    "coach"
   ],
   "feedbackOrderReason": "Warm feedback first → neutral → challenging. The writer receives encouraging feedback first, then increasingly sharp perspectives."
 }

@@ -7,7 +7,7 @@ import { platform } from "os";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { readSettings, writeSettings } from "./lib/settings.js";
-import { readPersonas, writePersonas, readLibraryWithStatus, addPersonaFromLibrary, removePersona } from "./lib/personas.js";
+import { readPersonas, writePersonas, readLibraryWithStatus, addPersonaFromLibrary, removePersona, updateLibraryPersona } from "./lib/personas.js";
 import { getProvider, getProviderTypes } from "./lib/llm/index.js";
 import type { ProviderType } from "./lib/llm/types.js";
 import postsRouter from "./routes/posts.js";
@@ -272,6 +272,15 @@ app.put("/api/personas", onlyLocalhost, (req, res) => {
 app.get("/api/personas/library", onlyLocalhost, (_req, res) => {
   const library = readLibraryWithStatus();
   res.json(library);
+});
+
+app.put("/api/personas/library/:id", onlyLocalhost, (req, res) => {
+  const result = updateLibraryPersona(req.params.id, req.body ?? {});
+  if (!result) {
+    res.status(404).json({ error: "Library persona not found" });
+    return;
+  }
+  res.json(result);
 });
 
 app.post("/api/personas/add", onlyLocalhost, (req, res) => {
