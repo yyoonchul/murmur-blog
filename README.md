@@ -4,11 +4,16 @@
 
 ## The Power of the First Comment
 
-On the internet, the first comment shapes how everyone else reads a post. But the reality? Most posts never even get one.
+On the internet, the first comment shapes how everyone else reads a post. 
+But the reality? Most posts never even get one.
 
-If you've ever written a blog, you know the feeling. 500 views, 0 comments. The disappointment is one thing, but **without feedback, your writing never improves.** You write alone, read alone, and it ends alone.
+If you've ever written a blog, you know the feeling. 
+The disappointment is one thing, but **without feedback, your writing never improves.** You write alone, read alone, and it ends alone.
 
-Monolog solves this. When you publish a post, **AI readers with different perspectives** read your writing and leave comments. They become the first readers of your work.
+Monolog solves this. When you publish a post, **AI readers with different perspectives** read your writing and leave comments. 
+They become the first readers of your work.
+
+![Writing a post and receiving AI comments](public/monolog_posting.gif)
 
 ## How It Works
 
@@ -16,6 +21,8 @@ Monolog solves this. When you publish a post, **AI readers with different perspe
 2. **AI reads** — Multiple personas read your post from their unique perspectives
 3. **Comments arrive** — From warm encouragement to sharp critique, diverse feedback appears
 4. **Conversation continues** — Reply to comments and AI responds back, creating a real dialogue
+
+![Replying to AI comments and continuing the conversation](public/monolog_reply.gif)
 
 ## Your First Readers
 
@@ -79,6 +86,8 @@ Open http://localhost:3001 in your browser.
 3. Click the provider to set it as **Active**
 
 That's it. Now when you write a post, AI personas will automatically leave the first comments.
+
+![Setting up API key in the Settings page](public/monolog_settings.gif)
 
 > **Note**: API keys are stored locally in `server/data/settings.json` and excluded from commits via `.gitignore`.
 
