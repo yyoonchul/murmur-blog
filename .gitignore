@@ -3,17 +3,19 @@ node_modules/
 
 # Build
 dist/
+frontend/dist/
 
 # Environment
 .env
+.env.local
+backend/.env
 
-# Data files (personal posts, settings with API keys)
-server/data/settings.json
-server/data/comments.json
-server/data/posts/posts.json
-server/data/posts/*-comments.json
-server/data/posts/*.md
-!server/data/posts/example.md
+# Backend
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
 
 # Logs
 *.log

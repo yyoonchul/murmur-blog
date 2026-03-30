@@ -1,0 +1,383 @@
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { marked } from "marked";
+import CommentCard from "../components/CommentCard";
+import CommentInput from "../components/CommentInput";
+import AiTypingIndicator from "../components/AiTypingIndicator";
+import { getPersonas } from "../../personas/api/personasApi";
+import type { PersonaInfo } from "../../personas/model/types";
+import { getSettingsSummary } from "../../settings/api/settingsApi";
+import { addComment, deletePost, getPost } from "../api/postsApi";
+import type { Comment, Post, ServerComment } from "../model/types";
+import { transformComments } from "../service/commentTransforms";
+
+type PersonaMap = Map<string, PersonaInfo>;
+type ProviderType = "anthropic" | "openai" | "google";
+
+const PROVIDER_KEY_MAP: Record<ProviderType, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  google: "GOOGLE_API_KEY",
+};
+
+export default function PostView() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const [post, setPost] = useState<Post | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [personaMap, setPersonaMap] = useState<PersonaMap>(new Map());
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [generatingReplyFor, setGeneratingReplyFor] = useState<string | null>(null);
+  const [aiReplyWarning, setAiReplyWarning] = useState<string | null>(null);
+
+  const justCreated = (location.state as { justCreated?: boolean })?.justCreated === true;
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load personas
+  useEffect(() => {
+    getPersonas()
+      .then((data) => {
+        const map = new Map<string, PersonaInfo>();
+        for (const p of data.personas) {
+          map.set(p.id, p);
+        }
+        setPersonaMap(map);
+      })
+      .catch((err) => console.error("Failed to load personas:", err));
+  }, []);
+
+  // Load post and comments
+  useEffect(() => {
+    if (!id) return;
+    getPost(id)
+      .then((data) => {
+        setPost(data);
+        const serverComments = (data as Post & { comments?: ServerComment[] }).comments || [];
+        setComments(transformComments(serverComments, id, personaMap));
+      })
+      .catch(() => setError("Failed to load post."))
+      .finally(() => setLoading(false));
+  }, [id, personaMap]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSettingsSummary()
+      .then((data) => {
+        if (cancelled) return;
+        const requiredKey = PROVIDER_KEY_MAP[data.provider];
+        const hasKey = data.apiKeys.some((k) => k.name === requiredKey);
+        if (!hasKey) {
+          setAiReplyWarning(
+            `${requiredKey} is not configured, so AI replies are currently disabled.`
+          );
+        } else {
+          setAiReplyWarning(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAiReplyWarning("Could not verify API key status. AI replies may fail.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Re-fetch comments helper
+  const refreshComments = useCallback(async () => {
+    if (!id) return 0;
+    try {
+      const data = await getPost(id);
+      const serverComments = (data as Post & { comments?: ServerComment[] }).comments || [];
+      setComments(transformComments(serverComments, id, personaMap));
+      return serverComments.length;
+    } catch {
+      return 0;
+    }
+  }, [id, personaMap]);
+
+  // Polling for AI comments after post creation
+  useEffect(() => {
+    if (!justCreated || !id) return;
+
+    setAiGenerating(true);
+
+    // Clear the justCreated state from location so refresh doesn't re-trigger
+    window.history.replaceState({}, "");
+
+    pollingRef.current = setInterval(async () => {
+      const count = await refreshComments();
+      if (count >= 5) {
+        // AI comments are likely done
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+        setAiGenerating(false);
+      }
+    }, 3000);
+
+    // Timeout after 2 minutes
+    pollingTimeoutRef.current = setTimeout(() => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      setAiGenerating(false);
+    }, 120000);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+    };
+  }, [justCreated, id, refreshComments]);
+
+  const handleDelete = async () => {
+    if (!id || !confirm("Are you sure you want to delete this post?")) return;
+    setDeleting(true);
+    try {
+      await deletePost(id);
+      navigate("/");
+    } catch {
+      setError("Failed to delete post.");
+      setDeleting(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const handleCommentSubmit = async (content: string) => {
+    if (!post) return;
+    if (aiReplyWarning) {
+      alert(aiReplyWarning);
+    }
+
+    const tempId = `temp-${Date.now()}`;
+    const optimisticComment: Comment = {
+      id: tempId,
+      postId: post.id,
+      persona: "Me",
+      content,
+      createdAt: new Date().toISOString(),
+      isAI: false,
+    };
+
+    setComments((prev) => [...prev, optimisticComment]);
+    setGeneratingReplyFor(tempId);
+
+    try {
+      const savedArr = await addComment(post.id, { personaId: "user", content });
+      const newComments = transformComments(savedArr, post.id, personaMap);
+      setComments((prev) => {
+        const withoutOptimistic = prev.filter((c) => c.id !== tempId);
+        return [...withoutOptimistic, ...newComments];
+      });
+    } catch (err) {
+      console.error("Failed to add comment:", err);
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+    } finally {
+      setGeneratingReplyFor(null);
+    }
+  };
+
+  const handleReplySubmit = async (parentId: string, content: string) => {
+    if (!post) return;
+    if (aiReplyWarning) {
+      alert(aiReplyWarning);
+    }
+
+    const tempId = `temp-${Date.now()}`;
+    const optimisticReply: Comment = {
+      id: tempId,
+      postId: post.id,
+      persona: "Me",
+      content,
+      createdAt: new Date().toISOString(),
+      isAI: false,
+      parentId,
+    };
+
+    setComments((prev) => [...prev, optimisticReply]);
+    setReplyingTo(null);
+    setGeneratingReplyFor(parentId);
+
+    try {
+      const savedArr = await addComment(post.id, { personaId: "user", content, parentId });
+      const newComments = transformComments(savedArr, post.id, personaMap);
+      setComments((prev) => {
+        const withoutOptimistic = prev.filter((c) => c.id !== tempId);
+        return [...withoutOptimistic, ...newComments];
+      });
+    } catch (err) {
+      console.error("Failed to add reply:", err);
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+    } finally {
+      setGeneratingReplyFor(null);
+    }
+  };
+
+  // Build comment tree: recursively attach replies to parent comments (supports infinite nesting)
+  const buildCommentTree = (flatComments: Comment[]): Comment[] => {
+    // Create a map of id -> comment with empty replies array
+    const commentMap = new Map<string, Comment>();
+    flatComments.forEach((c) => {
+      commentMap.set(c.id, { ...c, replies: [] });
+    });
+
+    // Build tree by attaching each comment to its parent's replies
+    const rootComments: Comment[] = [];
+
+    commentMap.forEach((comment) => {
+      if (comment.parentId) {
+        const parent = commentMap.get(comment.parentId);
+        if (parent && parent.replies) {
+          parent.replies.push(comment);
+        } else {
+          // Orphan comment (parent not found) - treat as root
+          rootComments.push(comment);
+        }
+      } else {
+        rootComments.push(comment);
+      }
+    });
+
+    // Sort replies by createdAt at each level
+    const sortReplies = (comments: Comment[]): Comment[] => {
+      return comments
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .map((c) => ({
+          ...c,
+          replies: c.replies ? sortReplies(c.replies) : [],
+        }));
+    };
+
+    return sortReplies(rootComments);
+  };
+
+  // Configure marked for safe HTML rendering
+  marked.setOptions({
+    breaks: true,
+    gfm: true,
+  });
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in">
+        <p className="text-muted text-sm">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error || !post) {
+    return (
+      <div className="animate-fade-in py-16 text-center">
+        <p className="text-secondary">{error || "Post not found."}</p>
+        <Link to="/" className="btn-accent text-sm mt-4 inline-block">
+          Back to Home
+        </Link>
+      </div>
+    );
+  }
+
+  const renderedContent = marked(post.content);
+  const commentTree = buildCommentTree(comments);
+
+  return (
+    <div className="animate-fade-in">
+      {/* Back link */}
+      <Link
+        to="/"
+        className="text-sm text-secondary hover:text-primary transition-colors inline-flex items-center gap-1 mb-8"
+      >
+        <span>←</span> Back
+      </Link>
+
+      {/* Post Header */}
+      <header className="mb-8">
+        <h1 className="font-display text-3xl font-semibold mb-3">
+          {post.title}
+        </h1>
+        <time className="text-sm text-muted">{formatDate(post.createdAt)}</time>
+      </header>
+
+      {/* Post Content */}
+      <article
+        className="article-body"
+        dangerouslySetInnerHTML={{ __html: renderedContent }}
+      />
+
+      {/* Divider */}
+      <hr className="border-border-light my-12" />
+
+      {/* Comments Section */}
+      <section>
+        <h2 className="text-sm text-secondary mb-6">
+          Comments ({comments.length})
+          {aiGenerating && (
+            <span className="ml-2">
+              <AiTypingIndicator compact />
+            </span>
+          )}
+        </h2>
+
+        {/* Comment List */}
+        <div className="space-y-4 mb-8">
+          {commentTree.map((comment) => (
+            <CommentCard
+              key={comment.id}
+              comment={comment}
+              depth={0}
+              maxDepth={8}
+              onReply={handleReplySubmit}
+              replyingTo={replyingTo}
+              onStartReply={setReplyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              generatingReplyFor={generatingReplyFor}
+            />
+          ))}
+
+          {comments.length === 0 && !aiGenerating && (
+            <p className="text-muted text-sm py-4">No comments yet</p>
+          )}
+
+          {comments.length === 0 && aiGenerating && (
+            <AiTypingIndicator />
+          )}
+        </div>
+
+        {/* Comment Input */}
+        {aiReplyWarning && (
+          <p className="text-xs text-accent mb-3">{aiReplyWarning}</p>
+        )}
+        <CommentInput
+          onSubmit={handleCommentSubmit}
+          placeholder="Write a comment..."
+        />
+      </section>
+
+      {/* Edit/Delete Buttons */}
+      <div className="mt-12 pt-8 border-t border-border-light flex items-center gap-4">
+        <Link to={`/edit/${post.id}`} className="btn-secondary text-sm">
+          Edit
+        </Link>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-sm text-muted hover:text-accent transition-colors"
+        >
+          {deleting ? "Deleting..." : "Delete"}
+        </button>
+      </div>
+    </div>
+  );
+}
