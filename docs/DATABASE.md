@@ -6,8 +6,9 @@ ORM definitions live in `backend/app/shared/models.py` (`Base` from `backend/app
 
 - `profiles` is the root user row (id = Supabase user UUID).
 - `posts` and `comments` belong to a user and (for comments) to a post; comments may self-reference for threading (`parent_id` → `comments.id`, `ON DELETE SET NULL`).
-- `user_settings`, `user_secrets`, `user_persona_state`, `user_persona_overrides` are keyed by `user_id` → `profiles.id` (`ON DELETE CASCADE`).
+- `user_settings`, `user_secrets`, `user_persona_state`, `user_persona_overrides`, `user_custom_personas` are keyed by `user_id` → `profiles.id` (`ON DELETE CASCADE`).
 - `user_persona_overrides` composite PK `(user_id, persona_id)` with `persona_id` → `persona_library.id`.
+- **Persona id convention** (stored in `comments.persona_id` and `user_persona_state.active_persona_ids` / `feedback_order`): preset/library personas use their `persona_library.id` string; human-authored comments use `"user"`; user-defined personas use `c:<uuid>` where `<uuid>` is `user_custom_personas.id`.
 
 ## Tables
 
@@ -60,6 +61,22 @@ Preset personas (shared catalog).
 | `feedback_order_reason` | TEXT | default `''` |
 | `active_persona_ids` | TEXT[] | default empty array |
 
+### `user_custom_personas`
+
+Per-user custom personas (same conceptual fields as a library row; not shared across users).
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `id` | UUID | PK |
+| `user_id` | UUID | FK → `profiles.id` CASCADE |
+| `name`, `role` | TEXT | display name and personality / role line |
+| `description` | TEXT | one-line blurb for planning (default `''`) |
+| `prompt_content` | TEXT | system prompt body for comment generation |
+| `emoji`, `color`, `bg_color`, `border_color` | TEXT | presentation (defaults empty string) |
+| `created_at`, `updated_at` | TIMESTAMP | default `NOW()` |
+
+API persona `id` for these rows is always `c:{id}` (lowercase `c`, colon, UUID string).
+
 ### `user_persona_overrides`
 
 Per-user overrides for a library persona.
@@ -86,7 +103,7 @@ Per-user overrides for a library persona.
 | `id` | UUID | PK, default gen |
 | `post_id` | UUID | FK → `posts.id` CASCADE |
 | `user_id` | UUID | FK → `profiles.id` CASCADE |
-| `persona_id` | TEXT | e.g. library id or `"user"` |
+| `persona_id` | TEXT | library id, `"user"`, or `c:<uuid>` (custom persona) |
 | `content` | TEXT | |
 | `parent_id` | UUID | nullable, FK → `comments.id` ON DELETE SET NULL |
 | `created_at` | TIMESTAMP | default `NOW()` |

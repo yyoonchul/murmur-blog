@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import { getPost, createPost, updatePost } from "../api/postsApi";
 
 export default function Editor() {
@@ -83,13 +84,21 @@ export default function Editor() {
           className="w-full font-display text-3xl font-semibold bg-transparent border-none outline-none placeholder:text-muted"
         />
 
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Write in markdown..."
-          className="w-full min-h-[400px] bg-transparent border-none outline-none resize-none text-primary leading-relaxed placeholder:text-muted font-mono text-sm"
-        />
+        <div className="grid md:grid-cols-2 gap-8 md:gap-10">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Write in markdown..."
+            className="w-full min-h-[400px] bg-transparent border-none outline-none resize-none text-primary leading-relaxed placeholder:text-muted font-mono text-sm md:min-h-[480px]"
+          />
+          <div className="hidden md:flex flex-col min-h-[400px] border-l border-border-light pl-8">
+            <p className="text-xs text-muted uppercase tracking-wide mb-3 shrink-0">Preview</p>
+            <div className="article-body text-sm overflow-y-auto flex-1 pr-1">
+              <ReactMarkdown>{content.trim() ? content : "*Preview appears here*"}</ReactMarkdown>
+            </div>
+          </div>
+        </div>
 
         <div className="flex items-center justify-between pt-4 border-t border-border-light">
           <div className="flex items-center gap-4">

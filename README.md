@@ -53,7 +53,7 @@ Beyond these, you can add readers from a **library of 20+ personas** — a VC pa
 Monolog is built for **signed-in users** with data stored in **your Supabase project** (posts, comments, persona configuration). The hosted API (**FastAPI on Railway**) encrypts LLM API keys you enter in Settings before persisting them. You can also set default provider keys on the server via environment variables.
 
 - **BYOK** — Bring your own API keys for Anthropic, OpenAI, or Google; they are never sent back to the browser after saving (only masked labels are shown).
-- **Auth** — Sign-in uses Supabase Auth (email magic link by default).
+- **Auth** — Sign-in uses Supabase Auth with **Google OAuth** (configure the Google provider in the Supabase dashboard).
 
 ---
 
@@ -68,7 +68,7 @@ Monolog is built for **signed-in users** with data stored in **your Supabase pro
 
 ### 1. Database & Auth
 
-Initialize tables and policies in Supabase so they match the SQLAlchemy models in `backend/app/` (e.g. `profiles`, `user_settings`, `posts`, `comments`, `persona_library`, auth trigger for new users). Enable **Email** auth and set redirect URLs for `http://localhost:5173`.
+Initialize tables and policies in Supabase so they match the SQLAlchemy models in `backend/app/` (e.g. `profiles`, `user_settings`, `posts`, `comments`, `persona_library`, `user_custom_personas`, auth trigger for new users). Enable the **Google** auth provider and set redirect URLs for `http://localhost:5173` (and production origins).
 
 ### 2. Backend (`backend/`)
 

@@ -40,7 +40,7 @@ Common status codes: `401` (missing/invalid token), `400` (validation), `404` (n
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/posts` | List current user’s posts with nested comments (ordered by post `created_at` desc, comments asc). |
+| `GET` | `/posts` | List current user’s posts (newest first). **Summary rows** — no `content` or `comments`; each item includes `commentCount`. |
 | `GET` | `/posts/{post_id}` | Single post if owned by user. |
 | `POST` | `/posts` | Create post. Body: `{ "title", "content" }`. `201`; triggers background initial comment generation. |
 | `PUT` | `/posts/{post_id}` | Update post. Body: `{ "title", "content" }`. |
@@ -48,7 +48,19 @@ Common status codes: `401` (missing/invalid token), `400` (validation), `404` (n
 | `POST` | `/posts/{post_id}/comments` | Add comment. Body: `{ "personaId", "content", "parentId"? }` (`parentId` optional UUID string). Returns array of comment objects (user comment plus AI replies when `personaId === "user"`). `201`. |
 | `POST` | `/posts/{post_id}/comments/generate` | Generate initial comments for empty post. `409` if comments already exist. Returns `{ "comments": [...] }`. |
 
-**Post response shape** (camelCase):
+**Post list item** (`GET /posts`, camelCase):
+
+```json
+{
+  "id": "<uuid>",
+  "title": "...",
+  "createdAt": "<ISO8601 Z>",
+  "updatedAt": "<ISO8601 Z>",
+  "commentCount": 0
+}
+```
+
+**Post detail response** (`GET`/`POST`/`PUT` single post, camelCase):
 
 ```json
 {
@@ -82,14 +94,25 @@ Common status codes: `401` (missing/invalid token), `400` (validation), `404` (n
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/personas` | `{ "personas", "feedbackOrder", "feedbackOrderReason" }` for active personas. |
-| `PUT` | `/personas` | Body: `personas` array, `feedbackOrder`, `feedbackOrderReason`. Updates overrides and active order. |
-| `GET` | `/personas/library` | `{ "presets": [...] }` — library entries with `isActive`, styling, `promptContent`, etc. |
-| `PUT` | `/personas/library/{persona_id}` | Update library-linked fields for a persona (admin/library row); response includes `isActive`. |
-| `POST` | `/personas/add` | Body: `{ "personaId" }` — activate preset from library. |
-| `DELETE` | `/personas/{persona_id}` | Remove from active set (and clear overrides for that persona). |
+| `GET` | `/personas` | `{ "personas", "feedbackOrder", "feedbackOrderReason" }` for active personas (presets + custom). |
+| `PUT` | `/personas` | Body: `personas` array, `feedbackOrder`, `feedbackOrderReason`. Updates overrides (presets) or custom rows; sets active order. |
+| `GET` | `/personas/library` | `{ "presets": [...] }` — full preset catalog with `isActive`, `description`, styling, `promptContent`. |
+| `PUT` | `/personas/library/{persona_id}` | Update a **shared** library row (preset); response includes `isActive`. |
+| `POST` | `/personas/add` | Body: `{ "personaId" }` — activate preset from library (`persona_library.id`). |
+| `DELETE` | `/personas/{persona_id}` | Remove from active set. For presets, clears overrides for that id; does not delete custom rows. |
+| `GET` | `/personas/custom` | `{ "customPersonas": [...] }` — all of the user’s custom personas with `isActive`. |
+| `POST` | `/personas/custom` | Create custom persona. Body: `name` (required), `role`, `description`, `promptContent`, optional `emoji`, `color`, `bgColor`, `borderColor`. `201`. |
+| `PUT` | `/personas/custom/{custom_id}` | Update custom persona (`custom_id` = UUID primary key, no `c:` prefix). |
+| `DELETE` | `/personas/custom/{custom_id}` | Delete custom row and remove from active lists. |
+| `POST` | `/personas/custom/add` | Body: `{ "personaId" }` — value is `c:<uuid>` or raw UUID string; adds that custom persona to the active set. |
 
-Persona objects in API use camelCase: `id`, `name`, `role`, `emoji`, `color`, `bgColor`, `borderColor`, `promptFile`, `promptContent`, etc.
+**Persona id rules**
+
+- Preset: string id from `persona_library` (e.g. `mina`).
+- Custom: `c:` + UUID (e.g. `c:550e8400-e29b-41d4-a716-446655440000`).
+- Human comment author in threads: `"user"`.
+
+Persona objects use camelCase: `id`, `name`, `role`, `description` (one-line blurb), `emoji`, `color`, `bgColor`, `borderColor`, `promptFile`, `promptContent`, and when present `source` (`"preset"` \| `"custom"`).
 
 ---
 

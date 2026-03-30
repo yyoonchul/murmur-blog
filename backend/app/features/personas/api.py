@@ -1,6 +1,9 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.features.personas import service as personas_service
+from app.features.personas.persona_ids import is_custom_persona_id, parse_custom_persona_uuid
 from app.shared.deps import AuthContext, get_auth_context
 from app.shared.models import UserPersonaState
 
@@ -51,4 +54,52 @@ def remove_persona_route(persona_id: str, ctx: AuthContext = Depends(get_auth_co
     result = personas_service.remove_persona(ctx.db, ctx.user_id, persona_id)
     if not result:
         raise HTTPException(404, "Persona not found")
+    return result
+
+
+@router.get("/custom")
+def list_custom_personas(ctx: AuthContext = Depends(get_auth_context)):
+    return {"customPersonas": personas_service.list_custom_personas(ctx.db, ctx.user_id)}
+
+
+@router.post("/custom", status_code=201)
+def create_custom_persona(body: dict, ctx: AuthContext = Depends(get_auth_context)):
+    row = personas_service.create_custom_persona(ctx.db, ctx.user_id, body)
+    if not row:
+        raise HTTPException(400, "name is required")
+    return row
+
+
+@router.put("/custom/{custom_id}")
+def update_custom_persona(custom_id: uuid.UUID, body: dict, ctx: AuthContext = Depends(get_auth_context)):
+    row = personas_service.update_custom_persona(ctx.db, ctx.user_id, custom_id, body)
+    if not row:
+        raise HTTPException(404, "Custom persona not found")
+    return row
+
+
+@router.delete("/custom/{custom_id}")
+def delete_custom_persona_route(custom_id: uuid.UUID, ctx: AuthContext = Depends(get_auth_context)):
+    if not personas_service.delete_custom_persona(ctx.db, ctx.user_id, custom_id):
+        raise HTTPException(404, "Custom persona not found")
+    return {"success": True}
+
+
+@router.post("/custom/add")
+def add_custom_to_active(body: dict, ctx: AuthContext = Depends(get_auth_context)):
+    raw = body.get("personaId") or body.get("customPersonaId")
+    if not raw:
+        raise HTTPException(400, "personaId required")
+    if isinstance(raw, str) and is_custom_persona_id(raw):
+        cid = parse_custom_persona_uuid(raw)
+    else:
+        try:
+            cid = uuid.UUID(str(raw))
+        except ValueError:
+            cid = None
+    if cid is None:
+        raise HTTPException(400, "personaId must be c:<uuid> or a UUID") from None
+    result = personas_service.add_custom_persona_to_active(ctx.db, ctx.user_id, cid)
+    if not result:
+        raise HTTPException(404, "Custom persona not found")
     return result

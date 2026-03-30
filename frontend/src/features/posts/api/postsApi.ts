@@ -1,8 +1,8 @@
 import { apiFetch } from "../../../shared/lib/apiClient";
-import type { Post } from "../model/types";
+import type { Post, PostListItem } from "../model/types";
 import type { ServerComment } from "../model/types";
 
-export async function getPosts(): Promise<Post[]> {
+export async function getPosts(): Promise<PostListItem[]> {
   const res = await apiFetch("/posts");
   if (!res.ok) throw new Error("Failed to fetch posts");
   return res.json();

@@ -1,9 +1,20 @@
+/** `GET /posts` list item (no body or comments). */
+export interface PostListItem {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  commentCount: number;
+}
+
+/** Full post from `GET /posts/:id`, create, or update. */
 export interface Post {
   id: string;
   title: string;
   content: string;
   createdAt: string;
   updatedAt: string;
+  comments?: ServerComment[];
 }
 
 export interface Comment {

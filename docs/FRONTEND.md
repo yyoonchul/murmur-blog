@@ -6,7 +6,7 @@ TypeScript, React 19, Vite 6, React Router 7, Tailwind CSS 4 (`@import "tailwind
 
 ## Directory layout
 
-- `frontend/src/features/` — feature modules: `auth`, `posts`, `settings`, `personas`
+- `frontend/src/features/` — feature modules: `auth`, `landing`, `posts`, `settings`, `personas`
 - `frontend/src/shared/` — `components/`, `lib/` (`apiClient.ts`, `supabase.ts`)
 
 ## API calls
@@ -19,7 +19,7 @@ Global styles and design tokens: `src/styles/globals.css` (imported from app ent
 
 ## Routing
 
-App routes are defined in `src/App.tsx` (e.g. home, editor, post view, settings, login). Adjust this file when adding pages.
+App routes are defined in `src/App.tsx`: guests see `landing` + `/login` (Google OAuth); signed-in users get the blog shell (`/`, `/post/:id`, `/write`, `/edit/:id`, `/settings`).
 
 ## Types
 

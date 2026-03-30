@@ -6,15 +6,19 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.features.personas.service import read_personas
+from app.features.personas.service import (
+    all_custom_personas_for_agent,
+    all_preset_personas_for_agent,
+    read_personas,
+    reply_planning_catalog,
+    resolve_writing_persona,
+)
 from app.features.settings.service import load_secrets, user_settings_dict
 from app.shared.comment_langchain.orchestrator import (
-    fallback_inter_persona_edges,
     invoke_comment_text,
     make_planning_model,
     make_writing_model,
     plan_initial_persona_ids,
-    plan_inter_persona_edges,
     plan_user_reply_persona_ids,
 )
 from app.shared.llm.providers import send_message_llm
@@ -30,11 +34,30 @@ SITUATION_REPLY = """You are a reader replying to an existing comment on a blog 
 Considering the context of the previous comments, naturally leave a reply in 1-3 sentences.
 Output only the comment text. Write only the comment content without any explanations or meta text."""
 
-INTER_PERSONA_REPLIES = [
-    {"replier": "doyun", "target": "mina"},
-    {"replier": "jihoon", "target": "doyun"},
-    {"replier": "eunseo", "target": "suhyun"},
-]
+
+def build_initial_candidate_pool(db: Session, user_id: uuid.UUID) -> list[dict[str, Any]]:
+    """
+    Up to 5 personas: if user has >=3 custom, take 3 custom (oldest first) + fill from presets;
+    else all custom + presets to reach 5.
+    """
+    customs = all_custom_personas_for_agent(db, user_id)
+    presets = all_preset_personas_for_agent(db)
+    if len(customs) >= 3:
+        chosen_c = customs[:3]
+    else:
+        chosen_c = list(customs)
+    need = max(0, 5 - len(chosen_c))
+    chosen_p = presets[:need] if need else []
+    pool = chosen_c + chosen_p
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for p in pool:
+        pid = p.get("id")
+        if not isinstance(pid, str) or pid in seen:
+            continue
+        seen.add(pid)
+        out.append(p)
+    return out[:5]
 
 
 def build_system_prompt(situation: str, prompt_content: str) -> str:
@@ -94,24 +117,28 @@ def _load_llm_context(db: Session, user_id: uuid.UUID) -> tuple[dict[str, Any], 
     return settings, secrets
 
 
-def _legacy_initial_and_inter_replies(
+def _persona_name_map(catalog: list[dict[str, Any]]) -> dict[str, str]:
+    return {p["id"]: p["name"] for p in catalog if isinstance(p.get("id"), str)}
+
+
+def _legacy_initial_only(
     db: Session,
     user_id: uuid.UUID,
     post_id: uuid.UUID,
     post: Post,
-    personas: list[dict[str, Any]],
-    feedback_order: list[str],
+    pool: list[dict[str, Any]],
     settings: dict[str, Any],
     secrets: dict[str, Any],
     persona_map: dict[str, str],
     post_dict: dict[str, str],
 ) -> None:
-    for persona_id in feedback_order:
-        persona = next((p for p in personas if p["id"] == persona_id), None)
-        if not persona:
+    for persona in pool[:5]:
+        pid = persona.get("id")
+        pc = persona.get("promptContent")
+        if not isinstance(pid, str) or not isinstance(pc, str):
             continue
         try:
-            system = build_system_prompt("initial", persona["promptContent"])
+            system = build_system_prompt("initial", pc)
             user_message = build_user_message(post_dict)
             content = send_message_llm(user_message, system=system, secrets=secrets, settings=settings)
             text = (content or "").strip()
@@ -120,44 +147,14 @@ def _legacy_initial_and_inter_replies(
                     id=uuid.uuid4(),
                     post_id=post_id,
                     user_id=user_id,
-                    persona_id=persona_id,
+                    persona_id=pid,
                     content=text,
                     parent_id=None,
                 )
                 db.add(c)
                 db.commit()
         except Exception as e:
-            log.exception("initial comment failed for %s: %s", persona_id, e)
-
-    rules = random.sample(INTER_PERSONA_REPLIES, min(2, len(INTER_PERSONA_REPLIES)))
-    for rule in rules:
-        replier = next((p for p in personas if p["id"] == rule["replier"]), None)
-        if not replier:
-            continue
-        db_comments = _comments_for_post(db, post_id)
-        ser = [_serialize_comment(x) for x in db_comments]
-        target = next((x for x in ser if x["personaId"] == rule["target"] and not x.get("parentId")), None)
-        if not target:
-            continue
-        try:
-            system = build_system_prompt("reply", replier["promptContent"])
-            thread_context = build_thread_context(ser, target["id"], persona_map)
-            user_message = build_user_message(post_dict, thread_context)
-            content = send_message_llm(user_message, system=system, secrets=secrets, settings=settings)
-            text = (content or "").strip()
-            if text:
-                c = Comment(
-                    id=uuid.uuid4(),
-                    post_id=post_id,
-                    user_id=user_id,
-                    persona_id=rule["replier"],
-                    content=text,
-                    parent_id=uuid.UUID(target["id"]),
-                )
-                db.add(c)
-                db.commit()
-        except Exception as e:
-            log.exception("inter-persona reply failed: %s", e)
+            log.exception("legacy initial comment failed for %s: %s", pid, e)
 
 
 def generate_initial_comments(db: Session, user_id: uuid.UUID, post_id: uuid.UUID) -> None:
@@ -165,35 +162,33 @@ def generate_initial_comments(db: Session, user_id: uuid.UUID, post_id: uuid.UUI
     if not post or post.user_id != user_id:
         log.warning("generate_initial_comments: post missing or wrong user")
         return
-    pdata = read_personas(db, user_id)
-    personas = pdata["personas"]
-    feedback_order = pdata.get("feedbackOrder") or []
-    if not personas:
-        log.error("No personas for user %s", user_id)
+    pool = build_initial_candidate_pool(db, user_id)
+    if not pool:
+        log.error("No candidate personas in pool for user %s", user_id)
         return
+    pdata = read_personas(db, user_id)
+    feedback_order = pdata.get("feedbackOrder") or []
     settings, secrets = _load_llm_context(db, user_id)
-    persona_map = {p["id"]: p["name"] for p in personas}
+    persona_map = _persona_name_map(pool)
     post_dict = {"title": post.title, "content": post.content}
 
     try:
         plan_chat = make_planning_model(settings, secrets)
         write_chat = make_writing_model(settings, secrets)
     except Exception as e:
-        log.warning("LangChain chat model unavailable (%s); using legacy comment generation", e)
-        _legacy_initial_and_inter_replies(
-            db, user_id, post_id, post, personas, feedback_order, settings, secrets, persona_map, post_dict
-        )
+        log.warning("LangChain chat model unavailable (%s); using legacy initial comments", e)
+        _legacy_initial_only(db, user_id, post_id, post, pool, settings, secrets, persona_map, post_dict)
         return
 
-    allowed = {p["id"] for p in personas}
-    initial_ids = plan_initial_persona_ids(plan_chat, post_dict, personas)
+    allowed = {p["id"] for p in pool}
+    initial_ids = plan_initial_persona_ids(plan_chat, post_dict, pool)
     if not initial_ids:
         initial_ids = [pid for pid in feedback_order if pid in allowed]
     if not initial_ids:
-        initial_ids = [personas[0]["id"]]
+        initial_ids = [pool[0]["id"]]
 
     for persona_id in initial_ids:
-        persona = next((p for p in personas if p["id"] == persona_id), None)
+        persona = next((p for p in pool if p["id"] == persona_id), None)
         if not persona:
             continue
         try:
@@ -214,40 +209,6 @@ def generate_initial_comments(db: Session, user_id: uuid.UUID, post_id: uuid.UUI
         except Exception as e:
             log.exception("LangChain initial comment failed for %s: %s", persona_id, e)
 
-    db_comments = _comments_for_post(db, post_id)
-    ser = [_serialize_comment(x) for x in db_comments]
-    top_level = [x for x in ser if not x.get("parentId")]
-    edges = plan_inter_persona_edges(plan_chat, post_dict, personas, top_level)
-    if not edges:
-        edges = fallback_inter_persona_edges(personas, top_level)
-
-    for replier_id, target_id in edges:
-        replier = next((p for p in personas if p["id"] == replier_id), None)
-        if not replier:
-            continue
-        db_comments = _comments_for_post(db, post_id)
-        ser = [_serialize_comment(x) for x in db_comments]
-        if not any(x["id"] == target_id for x in ser):
-            continue
-        try:
-            system = build_system_prompt("reply", replier["promptContent"])
-            thread_context = build_thread_context(ser, target_id, persona_map)
-            user_message = build_user_message(post_dict, thread_context)
-            text = invoke_comment_text(write_chat, system=system, user=user_message)
-            if text:
-                c = Comment(
-                    id=uuid.uuid4(),
-                    post_id=post_id,
-                    user_id=user_id,
-                    persona_id=replier_id,
-                    content=text,
-                    parent_id=uuid.UUID(target_id),
-                )
-                db.add(c)
-                db.commit()
-        except Exception as e:
-            log.exception("LangChain inter-persona reply failed: %s", e)
-
 
 def generate_reply(
     db: Session,
@@ -256,12 +217,11 @@ def generate_reply(
     post: Post,
     user_comment: Comment,
 ) -> list[Comment]:
-    pdata = read_personas(db, user_id)
-    personas = pdata["personas"]
-    if not personas:
+    catalog = reply_planning_catalog(db, user_id)
+    if not catalog:
         return []
     settings, secrets = _load_llm_context(db, user_id)
-    persona_map = {p["id"]: p["name"] for p in personas}
+    persona_map = _persona_name_map(catalog)
     post_dict = {"title": post.title, "content": post.content}
 
     suggested: list[str] = []
@@ -272,7 +232,7 @@ def generate_reply(
         if parent and parent["personaId"] != "user":
             suggested.append(parent["personaId"])
     if not suggested:
-        suggested.append(personas[random.randrange(len(personas))]["id"])
+        suggested.append(catalog[random.randrange(len(catalog))]["id"])
 
     try:
         plan_chat = make_planning_model(settings, secrets)
@@ -280,7 +240,7 @@ def generate_reply(
     except Exception as e:
         log.warning("LangChain chat model unavailable (%s); using legacy single reply", e)
         return _legacy_single_reply(
-            db, user_id, post_id, post, user_comment, personas, settings, secrets, persona_map, post_dict
+            db, user_id, post_id, post, user_comment, catalog, settings, secrets, persona_map, post_dict
         )
 
     db_comments = _comments_for_post(db, post_id)
@@ -291,7 +251,7 @@ def generate_reply(
     responder_ids = plan_user_reply_persona_ids(
         plan_chat,
         post_dict,
-        personas,
+        catalog,
         thread_context=thread_context,
         user_comment_excerpt=user_excerpt,
         suggested_responders=suggested,
@@ -302,7 +262,7 @@ def generate_reply(
     parent_for_reply = user_comment.parent_id or user_comment.id
     out: list[Comment] = []
     for responder_id in responder_ids:
-        responder = next((p for p in personas if p["id"] == responder_id), None)
+        responder = resolve_writing_persona(db, user_id, responder_id)
         if not responder:
             continue
         db_comments = _comments_for_post(db, post_id)
@@ -337,7 +297,7 @@ def _legacy_single_reply(
     post_id: uuid.UUID,
     post: Post,
     user_comment: Comment,
-    personas: list[dict[str, Any]],
+    catalog: list[dict[str, Any]],
     settings: dict[str, Any],
     secrets: dict[str, Any],
     persona_map: dict[str, str],
@@ -350,11 +310,11 @@ def _legacy_single_reply(
         if parent and parent["personaId"] != "user":
             responder_id = parent["personaId"]
         else:
-            responder_id = personas[random.randrange(len(personas))]["id"]
+            responder_id = catalog[random.randrange(len(catalog))]["id"]
     else:
-        responder_id = personas[random.randrange(len(personas))]["id"]
+        responder_id = catalog[random.randrange(len(catalog))]["id"]
 
-    responder = next((p for p in personas if p["id"] == responder_id), None)
+    responder = resolve_writing_persona(db, user_id, responder_id)
     if not responder:
         return []
 

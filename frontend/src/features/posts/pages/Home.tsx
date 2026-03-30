@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { getPosts } from "../api/postsApi";
-import type { Post } from "../model/types";
+import type { PostListItem } from "../model/types";
 
 export default function Home() {
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<PostListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,6 +14,13 @@ export default function Home() {
       .catch(() => setError("Failed to load posts."))
       .finally(() => setLoading(false));
   }, []);
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
 
   if (loading) {
     return (
@@ -47,12 +54,18 @@ export default function Home() {
               <li key={post.id}>
                 <Link
                   to={`/post/${post.id}`}
-                  className="py-5 flex items-center justify-between group block"
+                  className="py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-4 group block"
                 >
                   <span className="text-lg list-item-hover">{post.title}</span>
-                  <span className="text-muted text-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                    {'>'}
-                  </span>
+                  <div className="flex items-center gap-4 text-sm text-muted shrink-0">
+                    <span>{formatDate(post.createdAt)}</span>
+                    <span>
+                      {post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}
+                    </span>
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity text-secondary">
+                      →
+                    </span>
+                  </div>
                 </Link>
               </li>
             ))}

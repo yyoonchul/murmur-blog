@@ -12,6 +12,8 @@ export interface PersonaInfo {
 export interface PersonaDraft extends PersonaInfo {
   promptFile: string;
   promptContent: string;
+  description?: string;
+  source?: "preset" | "custom";
 }
 
 export interface PersonasDocument {

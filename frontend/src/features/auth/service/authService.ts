@@ -12,10 +12,11 @@ export function onAuthStateChange(callback: (session: Session | null) => void) {
   });
 }
 
-export async function signInWithOtp(email: string, redirectTo: string) {
-  return supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: redirectTo },
+export async function signInWithGoogle() {
+  const redirectTo = `${window.location.origin}/`;
+  return supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
   });
 }
 

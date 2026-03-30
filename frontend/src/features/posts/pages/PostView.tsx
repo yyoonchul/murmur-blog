@@ -1,10 +1,14 @@
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { marked } from "marked";
+import ReactMarkdown from "react-markdown";
 import CommentCard from "../components/CommentCard";
 import CommentInput from "../components/CommentInput";
 import AiTypingIndicator from "../components/AiTypingIndicator";
-import { getPersonas } from "../../personas/api/personasApi";
+import {
+  getCustomPersonasList,
+  getPersonaLibrary,
+  getPersonas,
+} from "../../personas/api/personasApi";
 import type { PersonaInfo } from "../../personas/model/types";
 import { getSettingsSummary } from "../../settings/api/settingsApi";
 import { addComment, deletePost, getPost } from "../api/postsApi";
@@ -41,17 +45,47 @@ export default function PostView() {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load personas
+  // Load persona display map (active + full library + custom) for comment attribution
   useEffect(() => {
-    getPersonas()
-      .then((data) => {
+    let cancelled = false;
+    Promise.all([getPersonas(), getPersonaLibrary(), getCustomPersonasList()])
+      .then(([activeDoc, lib, customDoc]) => {
+        if (cancelled) return;
         const map = new Map<string, PersonaInfo>();
-        for (const p of data.personas) {
-          map.set(p.id, p);
+        const add = (p: {
+          id: string;
+          name: string;
+          role: string;
+          emoji?: string;
+          color?: string;
+          bgColor?: string;
+          borderColor?: string;
+        }) => {
+          map.set(p.id, {
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            emoji: p.emoji || "○",
+            color: p.color || "#6b7280",
+            bgColor: p.bgColor || "#f3f4f6",
+            borderColor: p.borderColor || "#e5e7eb",
+          });
+        };
+        for (const p of activeDoc.personas) {
+          add(p);
+        }
+        for (const row of lib.presets as PersonaInfo[]) {
+          if (!map.has(row.id)) add(row);
+        }
+        for (const row of customDoc.customPersonas) {
+          add(row);
         }
         setPersonaMap(map);
       })
       .catch((err) => console.error("Failed to load personas:", err));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load post and comments
@@ -105,26 +139,32 @@ export default function PostView() {
     }
   }, [id, personaMap]);
 
-  // Polling for AI comments after post creation
+  // Polling for AI comments after post creation (count stable or timeout)
   useEffect(() => {
     if (!justCreated || !id) return;
 
     setAiGenerating(true);
 
-    // Clear the justCreated state from location so refresh doesn't re-trigger
     window.history.replaceState({}, "");
+
+    let lastCount = -1;
+    let stableTicks = 0;
 
     pollingRef.current = setInterval(async () => {
       const count = await refreshComments();
-      if (count >= 5) {
-        // AI comments are likely done
+      if (count > 0 && count === lastCount) {
+        stableTicks += 1;
+      } else {
+        stableTicks = 0;
+        lastCount = count;
+      }
+      if (count > 0 && stableTicks >= 2) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
         setAiGenerating(false);
       }
     }, 3000);
 
-    // Timeout after 2 minutes
     pollingTimeoutRef.current = setTimeout(() => {
       if (pollingRef.current) clearInterval(pollingRef.current);
       setAiGenerating(false);
@@ -264,12 +304,6 @@ export default function PostView() {
     return sortReplies(rootComments);
   };
 
-  // Configure marked for safe HTML rendering
-  marked.setOptions({
-    breaks: true,
-    gfm: true,
-  });
-
   if (loading) {
     return (
       <div className="animate-fade-in">
@@ -289,7 +323,6 @@ export default function PostView() {
     );
   }
 
-  const renderedContent = marked(post.content);
   const commentTree = buildCommentTree(comments);
 
   return (
@@ -311,10 +344,9 @@ export default function PostView() {
       </header>
 
       {/* Post Content */}
-      <article
-        className="article-body"
-        dangerouslySetInnerHTML={{ __html: renderedContent }}
-      />
+      <article className="article-body">
+        <ReactMarkdown>{post.content}</ReactMarkdown>
+      </article>
 
       {/* Divider */}
       <hr className="border-border-light my-12" />

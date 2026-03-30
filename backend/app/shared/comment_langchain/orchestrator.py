@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 MAX_INITIAL_COMMENTERS = 5
 MAX_INTER_PERSONA_REPLIES = 3
-MAX_USER_REPLY_PERSONAS = 3
+MAX_USER_REPLY_PERSONAS = 2
 PLAN_TEMPERATURE = 0.2
 WRITE_TEMPERATURE = 0.7
 
@@ -66,6 +66,7 @@ def _persona_catalog_json(personas: list[dict[str, Any]]) -> str:
                 "id": p.get("id"),
                 "name": p.get("name"),
                 "role": p.get("role"),
+                "description": (p.get("description") or "") if isinstance(p.get("description"), str) else "",
             }
         )
     return json.dumps(rows, ensure_ascii=False)

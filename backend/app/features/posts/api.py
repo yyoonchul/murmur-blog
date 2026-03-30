@@ -2,10 +2,10 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.features.posts.model import CommentCreate, PostCreate, PostUpdate
-from app.features.posts.service import generate_initial_comments, generate_reply
+from app.features.comment_agent.service import generate_initial_comments, generate_reply
 from app.shared.deps import AuthContext, get_auth_context
 from app.shared.db import SessionLocal
 from app.shared.models import Comment, Post
@@ -33,6 +33,16 @@ def _comment_out(c: Comment) -> dict:
     return d
 
 
+def _post_summary_out(post: Post, comment_count: int) -> dict:
+    return {
+        "id": str(post.id),
+        "title": post.title,
+        "createdAt": _iso(post.created_at),
+        "updatedAt": _iso(post.updated_at),
+        "commentCount": comment_count,
+    }
+
+
 def _post_out(post: Post, comments: list[Comment]) -> dict:
     return {
         "id": str(post.id),
@@ -56,11 +66,14 @@ def _bg_run_initial_comments(user_id: str, post_id: str) -> None:
 def list_posts(ctx: AuthContext = Depends(get_auth_context)):
     db = ctx.db
     posts = list(db.scalars(select(Post).where(Post.user_id == ctx.user_id).order_by(Post.created_at.desc())))
-    out = []
-    for p in posts:
-        comments = list(db.scalars(select(Comment).where(Comment.post_id == p.id).order_by(Comment.created_at)))
-        out.append(_post_out(p, comments))
-    return out
+    if not posts:
+        return []
+    ids = [p.id for p in posts]
+    rows = db.execute(
+        select(Comment.post_id, func.count(Comment.id)).where(Comment.post_id.in_(ids)).group_by(Comment.post_id)
+    ).all()
+    count_map = {row[0]: row[1] for row in rows}
+    return [_post_summary_out(p, int(count_map.get(p.id, 0))) for p in posts]
 
 
 @router.get("/{post_id}")

@@ -6,12 +6,18 @@ import {
   saveSettings,
 } from "../api/settingsApi";
 import {
+  deleteCustomPersonaApi,
   deletePersona,
+  getCustomPersonasList,
   getPersonaLibrary,
   getPersonas,
+  postAddCustomPersonaActive,
   postAddPersona,
+  postCreateCustomPersona,
+  putCustomPersona,
   putLibraryPersona,
   putPersonas,
+  type CustomPersonaRow,
 } from "../../personas/api/personasApi";
 
 // SVG icons that can be colored
@@ -104,6 +110,7 @@ interface Persona {
   borderColor: string;
   promptFile: string;
   promptContent: string;
+  description?: string;
 }
 
 interface PersonasData {
@@ -175,6 +182,14 @@ export default function Settings() {
   const [editingLibraryPersona, setEditingLibraryPersona] = useState<LibraryPersona | null>(null);
   const [editingLibraryData, setEditingLibraryData] = useState<LibraryPersona | null>(null);
 
+  const [customPersonas, setCustomPersonas] = useState<CustomPersonaRow[]>([]);
+  const [editingCustom, setEditingCustom] = useState<CustomPersonaRow | null>(null);
+  const [editingCustomData, setEditingCustomData] = useState<CustomPersonaRow | null>(null);
+  const [newCustomName, setNewCustomName] = useState("");
+  const [newCustomRole, setNewCustomRole] = useState("");
+  const [newCustomDescription, setNewCustomDescription] = useState("");
+  const [newCustomPrompt, setNewCustomPrompt] = useState("");
+
   const applyStateFromData = (data: Record<string, unknown>) => {
     setState((prev) => ({
       provider: (data.provider as ProviderType) ?? prev.provider,
@@ -199,7 +214,14 @@ export default function Settings() {
       .finally(() => setPersonasLoading(false));
 
     loadLibrary();
+    loadCustomPersonas();
   }, []);
+
+  const loadCustomPersonas = () => {
+    getCustomPersonasList()
+      .then((data) => setCustomPersonas(data.customPersonas || []))
+      .catch((err: Error) => setPersonasMessage({ type: "error", text: err?.message || "Failed to load custom personas" }));
+  };
 
   const updateSettings = (body: Record<string, unknown>) => {
     setSaving(true);
@@ -327,8 +349,43 @@ export default function Settings() {
         setPersonasData(data);
         setPersonasMessage({ type: "ok", text: "Persona added!" });
         loadLibrary();
+        loadCustomPersonas();
       })
       .catch((err: Error) => setPersonasMessage({ type: "error", text: err?.message || "Failed to add persona" }))
+      .finally(() => setPersonasSaving(false));
+  };
+
+  const handleAddCustomPersonaActive = (apiId: string) => {
+    setPersonasSaving(true);
+    postAddCustomPersonaActive(apiId)
+      .then((data) => {
+        setPersonasData(data);
+        setPersonasMessage({ type: "ok", text: "Persona added!" });
+        loadCustomPersonas();
+      })
+      .catch((err: Error) => setPersonasMessage({ type: "error", text: err?.message || "Failed to add persona" }))
+      .finally(() => setPersonasSaving(false));
+  };
+
+  const handleCreateCustomPersona = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomName.trim()) return;
+    setPersonasSaving(true);
+    postCreateCustomPersona({
+      name: newCustomName.trim(),
+      role: newCustomRole.trim(),
+      description: newCustomDescription.trim(),
+      promptContent: newCustomPrompt,
+    })
+      .then(() => {
+        setNewCustomName("");
+        setNewCustomRole("");
+        setNewCustomDescription("");
+        setNewCustomPrompt("");
+        setPersonasMessage({ type: "ok", text: "Custom persona created." });
+        loadCustomPersonas();
+      })
+      .catch((err: Error) => setPersonasMessage({ type: "error", text: err?.message || "Failed to create" }))
       .finally(() => setPersonasSaving(false));
   };
 
@@ -340,6 +397,7 @@ export default function Settings() {
         setPersonasData(data);
         setPersonasMessage({ type: "ok", text: "Persona removed." });
         loadLibrary();
+        loadCustomPersonas();
       })
       .catch((err: Error) => setPersonasMessage({ type: "error", text: err?.message || "Failed to remove persona" }))
       .finally(() => setPersonasSaving(false));
@@ -348,13 +406,14 @@ export default function Settings() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (editingLibraryPersona) setEditingLibraryPersona(null);
-        else if (openModelDropdown) setOpenModelDropdown(null);
+      if (editingLibraryPersona) setEditingLibraryPersona(null);
+      else if (editingCustom) setEditingCustom(null);
+      else if (openModelDropdown) setOpenModelDropdown(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [openModelDropdown, editingLibraryPersona]);
+  }, [openModelDropdown, editingLibraryPersona, editingCustom]);
 
   const apiKeyEntries = new Map(state.apiKeys.map((entry) => [entry.name, entry]));
 
@@ -689,15 +748,15 @@ export default function Settings() {
           <p className="text-muted text-sm">Loading personas...</p>
         ) : (
           <>
-            {/* Active Personas Section */}
-            {libraryPersonas.filter(p => p.isActive).length > 0 && (
+            {/* Active Personas Section (presets + custom) */}
+            {personasData.personas.length > 0 && (
               <div className="mb-8">
                 <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  Active Personas ({libraryPersonas.filter(p => p.isActive).length})
+                  Active Personas ({personasData.personas.length})
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                  {libraryPersonas.filter(p => p.isActive).map((persona) => {
+                  {personasData.personas.map((persona) => {
                     return (
                       <div
                         key={persona.id}
@@ -715,7 +774,7 @@ export default function Settings() {
                             handleRemovePersona(persona.id);
                           }}
                           disabled={personasSaving}
-                          title="비활성화"
+                          title="Remove from active"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -726,8 +785,36 @@ export default function Settings() {
                           type="button"
                           className="w-full text-left"
                           onClick={() => {
-                            setEditingLibraryPersona(persona);
-                            setEditingLibraryData({ ...persona });
+                            if (persona.id.startsWith("c:")) {
+                              const row =
+                                customPersonas.find((c) => c.id === persona.id) ||
+                                ({
+                                  ...persona,
+                                  description: persona.description || "",
+                                  promptFile: "",
+                                } as CustomPersonaRow);
+                              setEditingCustom(row);
+                              setEditingCustomData({ ...row });
+                            } else {
+                              const libRow = libraryPersonas.find((l) => l.id === persona.id);
+                              const merged: LibraryPersona = libRow
+                                ? { ...libRow, ...persona, isActive: true }
+                                : {
+                                    id: persona.id,
+                                    name: persona.name,
+                                    role: persona.role,
+                                    emoji: persona.emoji,
+                                    color: persona.color,
+                                    bgColor: persona.bgColor,
+                                    borderColor: persona.borderColor,
+                                    promptFile: persona.promptFile,
+                                    description: persona.description || "",
+                                    isActive: true,
+                                    promptContent: persona.promptContent,
+                                  };
+                              setEditingLibraryPersona(merged);
+                              setEditingLibraryData({ ...merged });
+                            }
                           }}
                         >
                           <div className="mb-2">
@@ -798,10 +885,232 @@ export default function Settings() {
               </div>
             )}
 
+            {/* Custom personas not in active set */}
+            {customPersonas.filter((c) => !c.isActive).length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
+                  Your custom personas ({customPersonas.filter((c) => !c.isActive).length})
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                  {customPersonas
+                    .filter((c) => !c.isActive)
+                    .map((persona) => (
+                      <div
+                        key={persona.id}
+                        className="p-4 rounded-xl border border-border-light bg-surface transition-all hover:shadow-md hover:border-border-dark relative overflow-hidden"
+                      >
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                          style={{ backgroundColor: persona.color || "#888" }}
+                        />
+                        <button
+                          type="button"
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center bg-accent/20 text-accent hover:bg-accent/30 transition-colors z-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddCustomPersonaActive(persona.id);
+                          }}
+                          disabled={personasSaving}
+                          title="Add to active"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="w-full text-left"
+                          onClick={() => {
+                            setEditingCustom(persona);
+                            setEditingCustomData({ ...persona });
+                          }}
+                        >
+                          <div className="mb-2">
+                            <PersonaIcon emoji={persona.emoji} color={persona.color || "#888"} size={28} />
+                          </div>
+                          <span className="font-display font-semibold block truncate text-sm" style={{ color: persona.color }}>
+                            {persona.name}
+                          </span>
+                          <span className="text-muted text-xs block truncate">{persona.role}</span>
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-10 rounded-xl border border-border-light p-4 bg-surface/50">
+              <h3 className="text-sm font-semibold mb-3">Create custom persona</h3>
+              <form onSubmit={handleCreateCustomPersona} className="space-y-3 max-w-xl">
+                <label className="block text-xs text-secondary">
+                  Name *
+                  <input
+                    type="text"
+                    className="input-minimal w-full text-sm mt-1"
+                    value={newCustomName}
+                    onChange={(e) => setNewCustomName(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className="block text-xs text-secondary">
+                  Personality / role
+                  <input
+                    type="text"
+                    className="input-minimal w-full text-sm mt-1"
+                    value={newCustomRole}
+                    onChange={(e) => setNewCustomRole(e.target.value)}
+                  />
+                </label>
+                <label className="block text-xs text-secondary">
+                  One-line description (for matching posts)
+                  <input
+                    type="text"
+                    className="input-minimal w-full text-sm mt-1"
+                    value={newCustomDescription}
+                    onChange={(e) => setNewCustomDescription(e.target.value)}
+                  />
+                </label>
+                <label className="block text-xs text-secondary">
+                  System prompt
+                  <textarea
+                    className="input-minimal w-full text-sm mt-1 min-h-[120px] font-mono"
+                    value={newCustomPrompt}
+                    onChange={(e) => setNewCustomPrompt(e.target.value)}
+                  />
+                </label>
+                <button type="submit" className="btn-primary text-sm" disabled={personasSaving || !newCustomName.trim()}>
+                  {personasSaving ? "Saving…" : "Create persona"}
+                </button>
+              </form>
+            </div>
+
             {personasMessage && (
               <p className={`text-sm mt-4 ${personasMessage.type === "ok" ? "text-secondary" : "text-accent"}`}>
                 {personasMessage.text}
               </p>
+            )}
+
+            {/* Custom persona edit modal */}
+            {editingCustom && editingCustomData && (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
+                onClick={(e) => e.target === e.currentTarget && setEditingCustom(null)}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div
+                  className="rounded-2xl border border-white/20 shadow-2xl backdrop-blur-xl bg-white/80 max-h-[90vh] w-full max-w-2xl flex flex-col"
+                  style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-4 border-b border-white/30 flex items-center justify-between shrink-0 rounded-t-2xl bg-white/40">
+                    <h3 className="font-display text-lg font-semibold text-primary">Edit custom persona</h3>
+                    <button
+                      type="button"
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-secondary hover:text-primary hover:bg-white/50 transition-colors"
+                      onClick={() => setEditingCustom(null)}
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="p-4 overflow-y-auto space-y-4">
+                    <label className="block text-xs text-secondary">
+                      Name
+                      <input
+                        type="text"
+                        className="input-minimal w-full text-sm mt-1"
+                        value={editingCustomData.name}
+                        onChange={(e) => setEditingCustomData({ ...editingCustomData, name: e.target.value })}
+                      />
+                    </label>
+                    <label className="block text-xs text-secondary">
+                      Role
+                      <input
+                        type="text"
+                        className="input-minimal w-full text-sm mt-1"
+                        value={editingCustomData.role}
+                        onChange={(e) => setEditingCustomData({ ...editingCustomData, role: e.target.value })}
+                      />
+                    </label>
+                    <label className="block text-xs text-secondary">
+                      One-line description
+                      <input
+                        type="text"
+                        className="input-minimal w-full text-sm mt-1"
+                        value={editingCustomData.description}
+                        onChange={(e) => setEditingCustomData({ ...editingCustomData, description: e.target.value })}
+                      />
+                    </label>
+                    <label className="block text-xs text-secondary">
+                      System prompt
+                      <textarea
+                        className="input-minimal w-full text-sm mt-1 min-h-[200px] font-mono"
+                        value={editingCustomData.promptContent}
+                        onChange={(e) => setEditingCustomData({ ...editingCustomData, promptContent: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <div className="p-4 border-t border-white/30 flex flex-wrap gap-2 justify-between shrink-0 rounded-b-2xl bg-white/40">
+                    <button
+                      type="button"
+                      className="text-sm px-3 py-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
+                      onClick={() => {
+                        if (!confirm("Delete this custom persona permanently?")) return;
+                        const uuid = editingCustom.id.startsWith("c:") ? editingCustom.id.slice(2) : editingCustom.id;
+                        setPersonasSaving(true);
+                        deleteCustomPersonaApi(uuid)
+                          .then(() => {
+                            setPersonasMessage({ type: "ok", text: "Deleted." });
+                            setEditingCustom(null);
+                            getPersonas().then(setPersonasData).catch(() => {});
+                            loadCustomPersonas();
+                          })
+                          .catch((err: Error) =>
+                            setPersonasMessage({ type: "error", text: err?.message || "Failed to delete" })
+                          )
+                          .finally(() => setPersonasSaving(false));
+                      }}
+                      disabled={personasSaving}
+                    >
+                      Delete
+                    </button>
+                    <div className="flex gap-2">
+                      <button type="button" className="btn-secondary text-sm" onClick={() => setEditingCustom(null)}>
+                        Close
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary text-sm"
+                        disabled={personasSaving}
+                        onClick={() => {
+                          const uuid = editingCustom.id.startsWith("c:") ? editingCustom.id.slice(2) : editingCustom.id;
+                          setPersonasSaving(true);
+                          putCustomPersona(uuid, {
+                            name: editingCustomData.name,
+                            role: editingCustomData.role,
+                            description: editingCustomData.description,
+                            promptContent: editingCustomData.promptContent,
+                          })
+                            .then(() => {
+                              setPersonasMessage({ type: "ok", text: "Saved." });
+                              setEditingCustom(null);
+                              getPersonas().then(setPersonasData).catch(() => {});
+                              loadCustomPersonas();
+                            })
+                            .catch((err: Error) =>
+                              setPersonasMessage({ type: "error", text: err?.message || "Failed to save" })
+                            )
+                            .finally(() => setPersonasSaving(false));
+                        }}
+                      >
+                        {personasSaving ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Library Persona Edit Modal */}
@@ -855,6 +1164,21 @@ export default function Settings() {
                           />
                         </label>
                       </div>
+                      <label className="block mt-3">
+                        <span className="text-xs text-secondary block mb-1">One-line description</span>
+                        {editingLibraryPersona.isActive ? (
+                          <p className="text-sm text-muted py-1">{editingLibraryData.description || "—"}</p>
+                        ) : (
+                          <input
+                            type="text"
+                            className="input-minimal w-full text-sm"
+                            value={editingLibraryData.description}
+                            onChange={(e) =>
+                              setEditingLibraryData({ ...editingLibraryData, description: e.target.value })
+                            }
+                          />
+                        )}
+                      </label>
                     </div>
 
                     {/* Style */}
@@ -997,6 +1321,7 @@ export default function Settings() {
                               bgColor: editingLibraryData.bgColor,
                               borderColor: editingLibraryData.borderColor,
                               promptContent: editingLibraryData.promptContent,
+                              description: editingLibraryData.description,
                             })
                               .then(() => {
                                 setPersonasMessage({ type: "ok", text: "Persona saved!" });

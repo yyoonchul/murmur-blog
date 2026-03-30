@@ -59,6 +59,25 @@ class UserPersonaState(Base):
     active_persona_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("ARRAY[]::text[]"))
 
 
+class UserCustomPersona(Base):
+    """User-defined personas; API id is ``c:{uuid}`` (see docs/DATABASE.md)."""
+
+    __tablename__ = "user_custom_personas"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    description: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    prompt_content: Mapped[str] = mapped_column(Text)
+    emoji: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    color: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    bg_color: Mapped[str] = mapped_column("bg_color", Text, server_default=text("''"))
+    border_color: Mapped[str] = mapped_column("border_color", Text, server_default=text("''"))
+    created_at: Mapped[datetime] = mapped_column(server_default=text("NOW()"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("NOW()"))
+
+
 class UserPersonaOverride(Base):
     __tablename__ = "user_persona_overrides"
 

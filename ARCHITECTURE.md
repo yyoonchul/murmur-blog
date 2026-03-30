@@ -17,7 +17,7 @@ flowchart LR
   subgraph server [Backend]
     API[FastAPI /api]
     AUTH[JWT via JWKS]
-    SVC[Features: posts, settings, personas]
+    SVC[Features: posts, comment_agent, settings, personas]
     LLM[LLM providers / LangChain]
   end
   DB[(PostgreSQL)]
@@ -33,9 +33,15 @@ flowchart LR
 
 ### Posts & comments
 
-- **Responsibility**: CRUD for user posts; threaded comments; optional AI generation for initial comments and replies when the user persona comments.
+- **Responsibility**: CRUD for user posts; threaded comments; HTTP triggers for AI generation.
 - **Location**: `backend/app/features/posts/`, `frontend/src/features/posts/`
-- **Dependencies**: Auth, DB, user bootstrap, LLM/settings for generation
+- **Dependencies**: Auth, DB, user bootstrap, `comment_agent` for generation
+
+### Comment agent (LLM)
+
+- **Responsibility**: LangChain planning + writing for initial post comments and AI replies to user comments; candidate pool rules (custom vs preset).
+- **Location**: `backend/app/features/comment_agent/`, `backend/app/shared/comment_langchain/`
+- **Dependencies**: Personas service (library + custom), settings/secrets, providers
 
 ### Settings & secrets
 
@@ -45,9 +51,9 @@ flowchart LR
 
 ### Personas
 
-- **Responsibility**: Active persona list per user, library presets, overrides (name, colors, prompts), feedback order.
+- **Responsibility**: Active persona list per user, library presets, per-user overrides, **user custom personas** (`user_custom_personas`, API ids `c:<uuid>`), feedback order.
 - **Location**: `backend/app/features/personas/`, `frontend/src/features/personas/`
-- **Dependencies**: Auth, DB, `persona_library` and persona state tables
+- **Dependencies**: Auth, DB, `persona_library`, `user_custom_personas`, persona state tables
 
 ### Auth
 
